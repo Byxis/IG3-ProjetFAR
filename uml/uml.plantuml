@@ -1,0 +1,62 @@
+@startuml
+
+struct user
+{
+  + name : String
+  + role : RoleEnum
+}
+
+struct message
+{
+  + from : User
+  + type : MessageType
+  + content : String ? file
+}
+
+struct file
+{
+}
+
+
+class client
+{
+ --
+ + main()
+ - initialiseConnection()
+ - sendMessage(message)
+ - receiveMessage(message) 
+}
+
+class server
+{
+ - TCP
+ - multi-threading
+ --
+ + main()
+ - initialiseConnection()
+ - receiveMessage()
+ - sendMessage(to, message)
+ - sendAllMessage(message)
+}
+
+enum RoleEnum
+{
+  USER
+  MODERATOR
+  ADMINISTRATOR
+}
+
+enum MessageType
+{
+  GENERAL_CHAT
+  PRIVATE_MESSAGE
+  SYSTEM_INFO
+}
+
+message -- MessageType
+message -- user
+message -- file
+
+user -- RoleEnum
+
+@enduml
