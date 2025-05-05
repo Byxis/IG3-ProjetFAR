@@ -6,8 +6,41 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <sys/time.h>
+#include <pthread.h> // Ajout de l'en-tête pthread
 
 #define MAX_MESSAGE_SIZE 2000
+
+void *receiveMessages(void *dS)
+{
+    int dSock = *((int *)dS);
+    char buffer[1024];
+
+    while (1)
+    {
+        int bytesRead = recv(dSock, buffer, sizeof(buffer) - 1, 0);
+        if (bytesRead > 0)
+        {
+            buffer[bytesRead] = '\0';
+            printf("\nMessage reçu: %s\n", buffer);
+            printf("Entrez une chaîne (max %d caractères): ", MAX_MESSAGE_SIZE);
+        }
+        else if (bytesRead == 0)
+        {
+            printf("\nConnexion fermée par le serveur\n");
+            exit(0);
+        }
+        else
+        {
+            if (errno != EAGAIN && errno != EWOULDBLOCK)
+            {
+                perror("recv");
+                exit(1);
+            }
+        }
+    }
+
+    return NULL;
+}
 
 int main()
 {
@@ -30,50 +63,42 @@ int main()
         exit(1);
     }
 
-    // Rendre le socket non bloquant
-    int flags = fcntl(dSock, F_GETFL, 0);
-    fcntl(dSock, F_SETFL, flags | O_NONBLOCK);
+    pthread_t thread_id;
+    if (pthread_create(&thread_id, NULL, receiveMessages, &dSock) != 0)
+    {
+        perror("pthread_create");
+        close(dSock);
+        exit(1);
+    }
 
-    char message[MAX_MESSAGE_SIZE+1];
-    char buffer[1024];
-    
-    while(1) {
-        printf("Entrez une chaîne (max %d caractères): ", MAX_MESSAGE_SIZE);
-        if (fgets(message, MAX_MESSAGE_SIZE+1, stdin) == NULL)
+    char message[MAX_MESSAGE_SIZE + 1];
+
+    printf("Entrez une chaîne (max %d caractères): ", MAX_MESSAGE_SIZE);
+    fflush(stdout);
+
+    while (1)
+    {
+        if (fgets(message, MAX_MESSAGE_SIZE + 1, stdin) == NULL)
         {
             perror("fgets");
             continue;
         }
-        
+
         message[strcspn(message, "\n")] = 0;
         printf("Envoi du message: %s\n", message);
-        
+
         int bytesSent = send(dSock, message, strlen(message) + 1, 0);
         if (bytesSent == -1)
         {
             perror("send");
             continue;
         }
-        
-        // Vérifier s'il y a des données à lire (non bloquant)
-        int bytesRead = recv(dSock, buffer, sizeof(buffer) - 1, 0);
-        if (bytesRead > 0) {
-            buffer[bytesRead] = '\0';
-            printf("Message reçu: %s\n", buffer);
-        }
-        else if (bytesRead == 0) {
-            printf("Connexion fermée par le serveur\n");
-            break;
-        }
-        else {
-            if (errno != EAGAIN && errno != EWOULDBLOCK) {
-                perror("recv");
-                break;
-            }
-            // Aucune donnée disponible pour le moment, on continue
-        }
+        printf("Entrez une chaîne (max %d caractères): ", MAX_MESSAGE_SIZE);
+        fflush(stdout);
     }
-    
-    close(dSock); // close the socket
+
+    pthread_cancel(thread_id);
+    pthread_join(thread_id, NULL);
+    close(dSock);
     return 0;
 }
