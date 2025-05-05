@@ -1,0 +1,23 @@
+@startuml Ascenseur
+Actor User1
+Boundary Client
+Control Server
+Actor User2
+
+
+User1 -> Client : Lancement du client
+Client -> Server: Demande de connexion
+Server --> Client: Connexion acceptée 
+
+
+loop Tant que socket ouverte
+Client -> User1: Demande d'envoi d'un message
+User1 --> Client : Message à envoyer
+Client -> Server : Envoyer le message au serveur
+Server -> User2: Envoyer le message au client
+end 
+
+User1 -> Client : CTRL + C
+Client -> Server : Fermeture de la socket
+
+
