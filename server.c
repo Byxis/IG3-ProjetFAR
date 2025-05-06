@@ -4,80 +4,97 @@
 #include <unistd.h>
 #include <string.h>
 #include <pthread.h>
+#include "ChainedList.h"
 
 #define MAX_MESSAGE_SIZE 2000
 #define MAX_CLIENTS 10
 
-int client_sockets[MAX_CLIENTS];
+List *client_sockets;
 pthread_mutex_t clients_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 // Function prototypes
-void send_to_all_clients(const char *message);
-void send_to_client(int client_index, const char *message);
-void remove_client(int index);
-int add_client(int sock);
+void sendAllClients(const char *message);
+void sendClient(int socket_fd, const char *message);
+void removeClient(int socket_fd);
+void addClient(int sock);
+void *handleClient(void *arg);
 
-// Ajouter un nouveau client
-int add_client(int sock)
+void addClient(int sock)
 {
     pthread_mutex_lock(&clients_mutex);
-    for (int i = 0; i < MAX_CLIENTS; i++)
-    {
-        if (client_sockets[i] == -1)
-        {
-            client_sockets[i] = sock;
-            pthread_mutex_unlock(&clients_mutex);
-            return i; // Retourne l'index du client
-        }
-    }
+    addLast(client_sockets, sock);
     pthread_mutex_unlock(&clients_mutex);
-    return -1; // Pas de place disponible
 }
 
-// Supprimer un client
-void remove_client(int index)
+void removeClient(int socket_fd)
 {
-    if (index >= 0 && index < MAX_CLIENTS)
+    pthread_mutex_lock(&clients_mutex);
+
+    if (!isListEmpty(client_sockets))
     {
-        pthread_mutex_lock(&clients_mutex);
-        if (client_sockets[index] != -1)
+        Node *current = client_sockets->first;
+        while (current != NULL)
         {
-            close(client_sockets[index]);
-            client_sockets[index] = -1;
+            if (current->val == socket_fd)
+            {
+                close(socket_fd);
+                break;
+            }
+            current = current->next;
         }
+        removeElement(client_sockets, socket_fd);
+    }
+
+    pthread_mutex_unlock(&clients_mutex);
+}
+
+void sendClient(int socket_fd, const char *message)
+{
+    pthread_mutex_lock(&clients_mutex);
+
+    if (isListEmpty(client_sockets))
+    {
         pthread_mutex_unlock(&clients_mutex);
+        return;
     }
-}
 
-// Envoyer un message à un client spécifique
-void send_to_client(int client_index, const char *message)
-{
-    pthread_mutex_lock(&clients_mutex);
-    if (client_index >= 0 && client_index < MAX_CLIENTS && client_sockets[client_index] != -1)
+    Node *current = client_sockets->first;
+    while (current != NULL)
     {
-        send(client_sockets[client_index], message, strlen(message) + 1, 0);
-    }
-    pthread_mutex_unlock(&clients_mutex);
-}
-
-// Envoyer un message à tous les clients
-void send_to_all_clients(const char *message)
-{
-    pthread_mutex_lock(&clients_mutex);
-    for (int i = 0; i < MAX_CLIENTS; i++)
-    {
-        if (client_sockets[i] != -1)
+        if (current->val == socket_fd)
         {
-            send(client_sockets[i], message, strlen(message) + 1, 0);
+            send(socket_fd, message, strlen(message) + 1, 0);
+            break;
         }
+        current = current->next;
     }
+
     pthread_mutex_unlock(&clients_mutex);
 }
 
-void *handle_client(void *arg)
+void sendAllClients(const char *message)
 {
-    int client_index = *((int *)arg);
-    int sock = client_sockets[client_index];
+    pthread_mutex_lock(&clients_mutex);
+
+    if (isListEmpty(client_sockets))
+    {
+        pthread_mutex_unlock(&clients_mutex);
+        return;
+    }
+
+    Node *current = client_sockets->first;
+    while (current != NULL)
+    {
+        send(current->val, message, strlen(message) + 1, 0);
+        current = current->next;
+    }
+
+    pthread_mutex_unlock(&clients_mutex);
+}
+
+void *handleClient(void *arg)
+{
+    int sock = *((int *)arg);
     free(arg);
 
     char buffer[MAX_MESSAGE_SIZE];
@@ -92,19 +109,13 @@ void *handle_client(void *arg)
         }
 
         buffer[received] = '\0';
-        printf("Message du client %d: %s\n", client_index, buffer);
-
-        // Exemple d'utilisation: diffuser le message à tous
-        sprintf(broadcast, "Client %d dit: %s", client_index, buffer);
-        send_to_all_clients(broadcast);
-
-        // Exemple d'utilisation: répondre uniquement à l'expéditeur
-        sprintf(broadcast, "Message reçu: %s", buffer);
-        send_to_client(client_index, broadcast);
+        sprintf(broadcast, "Client %d: %s", sock, buffer);
+        printf("Client %d: %s\n", sock, buffer);
+        sendAllClients(broadcast);
     }
 
-    printf("Client %d déconnecté\n", client_index);
-    remove_client(client_index);
+    printf("Client %d déconnecté\n", sock);
+    removeClient(sock);
     return NULL;
 }
 
@@ -117,9 +128,8 @@ int main()
         exit(1);
     }
 
-    // Permettre la réutilisation de l'adresse
     int opt = 1;
-    if (setsockopt(dSock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
+    if (setsockopt(dSock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) // allow reuse of the address
     {
         perror("setsockopt");
         exit(1);
@@ -130,7 +140,7 @@ int main()
     ad.sin_addr.s_addr = INADDR_ANY;
     ad.sin_port = htons((short)31473);
 
-    int res = bind(dSock, (struct sockaddr *)&ad, sizeof(ad));
+    int res = bind(dSock, (struct sockaddr *)&ad, sizeof(ad)); // bind the socket to the address
     if (res == -1)
     {
         perror("bind");
@@ -144,11 +154,15 @@ int main()
         exit(1);
     }
 
-    // Initialize client sockets array
-    for (int i = 0; i < MAX_CLIENTS; i++)
+    client_sockets = (List *)malloc(sizeof(List));
+    if (client_sockets == NULL)
     {
-        client_sockets[i] = -1;
+        perror("malloc client_sockets");
+        exit(1);
     }
+    client_sockets->first = NULL;
+    client_sockets->curr = NULL;
+    client_sockets->size = 0;
 
     printf("Serveur démarré sur le port 31473\n");
 
@@ -165,36 +179,31 @@ int main()
             continue;
         }
 
-        int client_index = add_client(new_socket);
-        if (client_index == -1)
-        {
-            printf("Trop de clients, connexion refusée\n");
-            close(new_socket);
-            continue;
-        }
-
-        printf("Nouveau client connecté (index: %d)\n", client_index);
+        printf("Nouveau client connecté (socket: %d)\n", new_socket);
+        addClient(new_socket);
 
         int *arg = malloc(sizeof(int));
         if (arg == NULL)
         {
             perror("malloc");
-            remove_client(client_index);
+            removeClient(new_socket);
             continue;
         }
-        *arg = client_index;
+        *arg = new_socket;
 
         pthread_t thread_id;
-        if (pthread_create(&thread_id, NULL, handle_client, arg) != 0)
+        if (pthread_create(&thread_id, NULL, handleClient, arg) != 0)
         {
             perror("pthread_create");
             free(arg);
-            remove_client(client_index);
+            removeClient(new_socket);
             continue;
         }
-
         pthread_detach(thread_id);
     }
 
+    free(client_sockets);
+    close(dSock);
+    pthread_mutex_destroy(&clients_mutex);
     return 0;
 }

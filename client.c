@@ -21,8 +21,7 @@ void *receiveMessages(void *dS)
         if (bytesRead > 0)
         {
             buffer[bytesRead] = '\0';
-            printf("\nMessage reçu: %s\n", buffer);
-            printf("Entrez une chaîne (max %d caractères): ", MAX_MESSAGE_SIZE);
+            printf("%s\n", buffer);
         }
         else if (bytesRead == 0)
         {
@@ -85,7 +84,6 @@ int main()
         }
 
         message[strcspn(message, "\n")] = 0;
-        printf("Envoi du message: %s\n", message);
 
         int bytesSent = send(dSock, message, strlen(message) + 1, 0);
         if (bytesSent == -1)
@@ -93,7 +91,6 @@ int main()
             perror("send");
             continue;
         }
-        printf("Entrez une chaîne (max %d caractères): ", MAX_MESSAGE_SIZE);
         fflush(stdout);
     }
 
