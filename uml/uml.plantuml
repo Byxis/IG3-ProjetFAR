@@ -10,33 +10,11 @@ struct message
 {
   + from : User
   + type : MessageType
-  + content : String ? file
+  + content : String || file
 }
 
 struct file
 {
-}
-
-
-class client
-{
- --
- + main()
- - initialiseConnection()
- - sendMessage(message)
- - receiveMessage(message) 
-}
-
-class server
-{
- - TCP
- - multi-threading
- --
- + main()
- - initialiseConnection()
- - receiveMessage()
- - sendMessage(to, message)
- - sendAllMessage(message)
 }
 
 enum RoleEnum
