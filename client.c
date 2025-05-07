@@ -52,7 +52,7 @@ int main()
 
     struct sockaddr_in ad;
     ad.sin_family = AF_INET;
-    ad.sin_addr.s_addr = INADDR_ANY;
+    ad.sin_addr.s_addr = INADDR_ANY; // INADDR_ANY or inet_addr("ipv4_address like 1.1.1.1")
     ad.sin_port = htons((short)31473);
 
     int res = connect(dSock, (struct sockaddr *)&ad, sizeof(ad)); // connect to the server
