@@ -5,6 +5,7 @@
 #include <string.h>
 #include <pthread.h>
 #include "ChainedList.h"
+#include "file.h"
 
 #define MAX_MESSAGE_SIZE 2000
 #define MAX_CLIENTS 10
@@ -98,7 +99,7 @@ void *handleClient(void *arg)
     free(arg);
 
     char buffer[MAX_MESSAGE_SIZE];
-    char broadcast[MAX_MESSAGE_SIZE + 20];
+    char broadcast[MAX_MESSAGE_SIZE + 50];
 
     while (1)
     {
@@ -109,15 +110,105 @@ void *handleClient(void *arg)
         }
 
         buffer[received] = '\0';
+
+
+        // Order processing
+        if (strcmp(buffer, "@help") == 0) {
+            sendFileContent(sock, "README.txt");
+            continue;
+        }
+
+        if (strcmp(buffer, "@credits") == 0) {
+            sendFileContent(sock, "Credits.txt");
+            continue;
+        }
+
+        if (strncmp(buffer, "@upload", 7) == 0) {
+            char filename[100];
+            if (sscanf(buffer + 8, "%s", filename) == 1) {
+                upload(sock, filename);
+            }
+            else {
+                send(sock, "Nom de fichier manquant.\n", 26, 0);
+            }
+            continue;
+        }
+
+        if (strncmp(buffer, "@download", 9) == 0) {
+            char filename[100];
+            if (sscanf(buffer + 8, "%s", filename) == 1) {
+                download(sock, filename);
+            } else {
+                send(sock, "Nom de fichier manquant.\n", 26, 0);
+            }
+            continue;
+        }
+
         sprintf(broadcast, "Client %d: %s", sock, buffer);
         printf("Client %d: %s\n", sock, buffer);
         sendAllClients(broadcast);
     }
 
+
+
     printf("Client %d déconnecté\n", sock);
     removeClient(sock);
     return NULL;
 }
+
+
+void sendFileContent(int client, const char *filename) {
+    FileHandler file = open_file(filename, "r");
+
+    char ligne[1024];
+    while (read_file(&file, ligne, sizeof(ligne)) == 1) {
+        send(client, ligne, strlen(ligne), 0);
+        send(client, "\n", 1, 0);
+    }
+    close_file(&file);
+}
+
+// reçoit un fichier envoyé par un client via le socket et le sauvegarde localement
+void upload(int sock, const char *filename) {
+    // sécurité: éviter les chemins relatifs (fichers dangereux)
+    if (strstr(filename, "..") != NULL) {
+        send(sock, "Nom de fichier invalide.\n", 26, 0);
+        return;
+    }
+    FileHandler file = open_file(filename, "wb"); // ouvre le fichier pour écriture binaire
+    char buffer[1024]; // pour stocker les données reçues du client
+    int len;
+
+    while ((len = recv(sock, buffer, sizeof(buffer), 0)) > 0) {
+        if (strncmp(buffer, "__END__", 7) == 0 && len == 7) {// détection du marqueur de fin
+            break;
+        }
+        fwrite(buffer, 1, len, file.fp);
+    }
+    close_file(&file);
+    send(sock, "Fichier reçu avec succès\n", 26, 0);
+}
+
+
+// lit un fichier local en binaire et l’envoie au client via le socket
+void download(int sock, const char *filename) {
+    // sécurité : éviter les chemins relatifs (fichers dangereux)
+    if (strstr(filename, "..") != NULL) {
+        send(sock, "Nom de fichier invalide.\n", 26, 0);
+        return;
+    }
+    FileHandler file = open_file(filename, "rb"); // ouverture du fichier en lecture binaire
+    char buffer[1024]; // stock du blocs de fichiers lus
+    size_t bytes; // stocke du nombre d'octets lus
+
+    while ((bytes = fread(buffer, 1, sizeof(buffer), file.fp)) > 0) {
+        send(sock, buffer, bytes, 0);
+    }
+    close_file(&file);
+    send(sock, "__END__", 7, 0);
+}
+
+
 
 int main()
 {

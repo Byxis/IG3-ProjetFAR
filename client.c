@@ -6,7 +6,10 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <sys/time.h>
-#include <pthread.h> // Ajout de l'en-tête pthread
+#include <pthread.h> 
+#include "file.h"
+
+
 
 #define MAX_MESSAGE_SIZE 2000
 
@@ -40,6 +43,47 @@ void *receiveMessages(void *dS)
 
     return NULL;
 }
+
+// lit un fichier local en binaire et l'envoie au serveur via le socket
+void upload(int sock, const char *filename) {
+    // sécurité : éviter les chemins relatifs (fichers dangereux)
+    if (strstr(filename, "..") != NULL) {
+        send(sock, "Nom de fichier invalide.\n", 26, 0);
+        return;
+    }
+    FileHandler file = open_file(filename, "rb"); // ouverture du fichier en lecture binaire 
+    char buffer[1024]; // stock du blocs de fichiers lus 
+    size_t bytes; // stocke du nombre d'octets lus 
+    while ((bytes = fread(buffer, 1, sizeof(buffer), file.fp)) > 0) {
+        send(sock, buffer, bytes, 0);
+    }
+    send(sock, "__END__", 7, 0);
+    close_file(&file);
+}
+
+// reçoit un fichier depuis le serveur via le socket et le sauvegarde localement
+void download(int sock, const char *filename) {
+    // sécurité: éviter les chemins relatifs (fichers dangereux)
+    if (strstr(filename, "..") != NULL) {
+        send(sock, "Nom de fichier invalide.\n", 26, 0);
+        return;
+    }
+    FileHandler file = open_file(filename, "wb"); // ouvre le fichier pour écriture binaire
+    char buffer[1024]; // reception des blocs venant du serveur
+    int len;
+    while ((len = recv(sock, buffer, sizeof(buffer), 0)) > 0) {
+        if (strncmp(buffer, "__END__", 7) == 0 && len == 7) {// détection du marqueur de fin
+            break; 
+        }
+        fwrite(buffer, 1, len, file.fp);
+    }
+    close_file(&file);
+    printf("Fichier '%s' téléchargé avec succès.\n", filename);
+}
+
+
+
+
 
 int main()
 {
@@ -82,6 +126,29 @@ int main()
             perror("fgets");
             continue;
         }
+        
+        if (strncmp(message, "@upload", 7) == 0) {
+            char filename[100];
+            if (sscanf(message + 8, "%s", filename) == 1) {
+                upload(dSock, filename);
+            }
+            else {
+                send(dSock, "Nom de fichier manquant.\n", 26, 0);
+            }
+            continue;
+        }
+        
+        if (strncmp(message, "@download", 9) == 0) {
+            char filename[100];
+            if (sscanf(message + 10, "%s", filename) == 1) {
+                download(dSock, filename);
+            }
+            else {
+                send(dSock, "Nom de fichier manquant.\n", 26, 0);
+            }
+            continue;
+        }
+        
 
         message[strcspn(message, "\n")] = 0;
 
