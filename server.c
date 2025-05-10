@@ -19,6 +19,9 @@ void sendClient(int socket_fd, const char *message);
 void removeClient(int socket_fd);
 void addClient(int sock);
 void *handleClient(void *arg);
+void sendFileContent(int client, const char *filename);
+void upload(int sock, const char *filename);
+void download(int sock, const char *filename);
 
 void addClient(int sock)
 {
