@@ -127,6 +127,8 @@ int main()
             continue;
         }
         
+        message[strcspn(message, "\n")] = 0;
+
         if (strncmp(message, "@upload", 7) == 0) {
             char filename[100];
             if (sscanf(message + 8, "%s", filename) == 1) {
@@ -149,9 +151,6 @@ int main()
             continue;
         }
         
-
-        message[strcspn(message, "\n")] = 0;
-
         int bytesSent = send(dSock, message, strlen(message) + 1, 0);
         if (bytesSent == -1)
         {
