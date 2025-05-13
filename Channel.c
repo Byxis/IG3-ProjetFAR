@@ -1,0 +1,404 @@
+#include "Channel.h"
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <stdbool.h>
+#include <sys/socket.h>
+
+static struct
+{
+    Channel *first;
+} channelList = {NULL};
+
+static Channel *getChannel(char *name);
+static bool isChannelFull(char *name);
+static int getChannelSize(char *name);
+static bool isChannelEmpty(char *name);
+static void *createChannel(char *name, int maxSize, int clientSocket);
+static void removeChannel(char *name);
+
+void initChannelSystem()
+{
+    Channel *channel = (Channel *)malloc(sizeof(Channel));
+    if (channel == NULL)
+    {
+        perror("Failed to allocate memory for channel");
+        exit(EXIT_FAILURE);
+    }
+    channel->name = strdup("Hub");
+    channel->maxSize = -1;
+    channel->clients = createList(-1);
+    channel->next = NULL;
+    channelList.first = channel;
+}
+
+void cleanupChannelSystem()
+{
+    Channel *current = channelList.first;
+    Channel *next;
+
+    while (current != NULL)
+    {
+        next = current->next;
+
+        List *list = current->clients;
+        Node *node = list->first;
+        while (node != NULL)
+        {
+            Node *temp = node;
+            node = node->next;
+            free(temp);
+        }
+        free(list);
+
+        free(current->name);
+        free(current);
+        current = next;
+    }
+    channelList.first = NULL;
+}
+
+static void *createChannel(char *name, int maxSize, int clientSocket)
+{
+    if (name == NULL || strlen(name) == 0)
+    {
+        fprintf(stderr, "Channel name cannot be empty\n");
+        return NULL;
+    }
+
+    Channel *existingChannel = channelList.first;
+    while (existingChannel != NULL)
+    {
+        if (strcmp(existingChannel->name, name) == 0)
+        {
+            fprintf(stderr, "Channel with this name already exists\n");
+            return NULL;
+        }
+        existingChannel = existingChannel->next;
+    }
+
+    if (maxSize < -1)
+    {
+        fprintf(stderr, "Invalid max size for channel\n");
+        return NULL;
+    }
+
+    Channel *newChannel = (Channel *)malloc(sizeof(Channel));
+    if (newChannel == NULL)
+    {
+        perror("Failed to allocate memory for new channel");
+        return NULL;
+    }
+    newChannel->name = strdup(name);
+    newChannel->maxSize = maxSize;
+    newChannel->clients = createList(clientSocket);
+    newChannel->next = channelList.first->next;
+    channelList.first->next = newChannel;
+}
+
+static Channel *getChannel(char *name)
+{
+    Channel *channel = channelList.first;
+    while (channel != NULL)
+    {
+        if (strcmp(channel->name, name) == 0)
+        {
+            return channel;
+        }
+        channel = channel->next;
+    }
+    return NULL;
+}
+
+static bool isChannelFull(char *name)
+{
+    Channel *channel = getChannel(name);
+    if (channel == NULL)
+    {
+        fprintf(stderr, "Channel not found\n");
+        return false;
+    }
+    if (channel->maxSize == -1)
+    {
+        return false;
+    }
+
+    return channel->clients->size > channel->maxSize;
+}
+
+static int getChannelSize(char *name)
+{
+    Channel *channel = getChannel(name);
+    if (channel == NULL)
+    {
+        fprintf(stderr, "Channel not found\n");
+        return -1;
+    }
+    return channel->clients->size;
+}
+
+static bool isChannelEmpty(char *name)
+{
+    Channel *channel = getChannel(name);
+    if (channel == NULL)
+    {
+        fprintf(stderr, "Channel not found\n");
+        return false;
+    }
+    if (isListEmpty(channel->clients))
+    {
+        fprintf(stderr, "Channel is empty\n");
+        return true;
+    }
+    fprintf(stderr, "Channel is not empty\n");
+    return false;
+}
+
+char *getClientChannelName(int clientSocket)
+{
+    Channel *channel = getClientChannel(clientSocket);
+    if (channel != NULL)
+    {
+        return channel->name;
+    }
+    return NULL;
+}
+
+Channel *getClientChannel(int clientSocket)
+{
+    Channel *channel = channelList.first;
+    while (channel != NULL)
+    {
+        Node *current = channel->clients->first;
+        while (current != NULL)
+        {
+            if (current->val == clientSocket)
+            {
+                return channel;
+            }
+            current = current->next;
+        }
+        channel = channel->next;
+    }
+    return NULL;
+}
+
+void addClient(char *name, int clientSocket)
+{
+    Channel *channel = channelList.first;
+    while (channel != NULL)
+    {
+        if (strcmp(channel->name, name) == 0)
+        {
+            if (isChannelFull(name))
+            {
+                fprintf(stderr, "Channel is full, cannot add client\n");
+                return;
+            }
+            addLast(channel->clients, clientSocket);
+            return;
+        }
+        channel = channel->next;
+    }
+}
+
+void removeClient(char *name, int clientSocket)
+{
+    Channel *channel = channelList.first;
+    while (channel != NULL)
+    {
+        if (strcmp(channel->name, name) == 0)
+        {
+            removeElement(channel->clients, clientSocket);
+            if (isListEmpty(channel->clients) && strcmp(name, "Hub") != 0)
+            {
+                removeChannel(name);
+            }
+            return;
+        }
+        channel = channel->next;
+    }
+}
+
+static void removeChannel(char *name)
+{
+    if (name == NULL || strlen(name) == 0)
+    {
+        fprintf(stderr, "Channel name cannot be empty\n");
+        return;
+    }
+
+    if (strcmp(channelList.first->name, name) == 0)
+    {
+        fprintf(stderr, "Cannot remove the hub channel\n");
+        return;
+    }
+
+    Channel *current = channelList.first;
+    Channel *previous = NULL;
+
+    while (current != NULL)
+    {
+        if (strcmp(current->name, name) == 0)
+        {
+            if (previous == NULL)
+            {
+                channelList.first = current->next;
+            }
+            else
+            {
+                previous->next = current->next;
+            }
+            deleteList(current->clients);
+            free(current->name);
+            free(current);
+            return;
+        }
+        previous = current;
+        current = current->next;
+    }
+}
+
+void sendChannelMessage(int clientSocket, const char *message)
+{
+    Channel *channel = getClientChannel(clientSocket);
+    if (channel == NULL)
+    {
+        fprintf(stderr, "Client is not in any channel\n");
+        return;
+    }
+    Node *current = channel->clients->first;
+    while (current != NULL)
+    {
+        if (current->val != clientSocket)
+        {
+            send(current->val, message, strlen(message) + 1, 0);
+        }
+        current = current->next;
+    }
+}
+
+bool leaveChannel(char *name, int clientSocket, char *response, size_t responseSize)
+{
+    if (name == NULL || strlen(name) == 0)
+    {
+        return false;
+    }
+
+    Channel *clientChannel = getClientChannel(clientSocket);
+    if (clientChannel == NULL || strcmp(clientChannel->name, name) != 0)
+    {
+        snprintf(response, responseSize, "You are not in this channel");
+        return false;
+    }
+
+    if (strcmp(name, "Hub") == 0)
+    {
+        snprintf(response, responseSize, "You cannot leave the Hub channel");
+        return false;
+    }
+
+    removeClient(name, clientSocket);
+    addClient("Hub", clientSocket);
+
+    snprintf(response, responseSize, "You have left %s and automatically rejoined the Hub channel", name);
+    return true;
+}
+
+bool createAndJoinChannel(char *name, int maxSize, int clientSocket, char *response, size_t responseSize)
+{
+    if (name == NULL || strlen(name) == 0)
+    {
+        snprintf(response, responseSize, "Channel name cannot be empty");
+        return false;
+    }
+
+    Channel *existingChannel = channelList.first;
+    while (existingChannel != NULL)
+    {
+        if (strcmp(existingChannel->name, name) == 0)
+        {
+            snprintf(response, responseSize, "Channel with this name already exists");
+            return false;
+        }
+        existingChannel = existingChannel->next;
+    }
+
+    if (maxSize < -1)
+    {
+        snprintf(response, responseSize, "Invalid max size for channel");
+        return false;
+    }
+
+    Channel *newChannel = (Channel *)malloc(sizeof(Channel));
+    if (newChannel == NULL)
+    {
+        snprintf(response, responseSize, "Failed to allocate memory for new channel");
+        return false;
+    }
+    newChannel->name = strdup(name);
+    newChannel->maxSize = maxSize;
+    newChannel->clients = createList(-1);
+    newChannel->next = channelList.first->next;
+    channelList.first->next = newChannel;
+
+    char *currentChannel = getClientChannelName(clientSocket);
+    if (currentChannel != NULL && strcmp(currentChannel, name) != 0)
+    {
+        removeClient(currentChannel, clientSocket);
+    }
+    addClient(name, clientSocket);
+
+    snprintf(response, responseSize, "You have created and joined %s", name);
+    return true;
+}
+
+bool joinChannel(char *name, int clientSocket, char *response, size_t responseSize)
+{
+    if (name == NULL || strlen(name) == 0)
+    {
+        snprintf(response, responseSize, "Channel name cannot be empty");
+        return false;
+    }
+
+    Channel *channel = getChannel(name);
+    if (channel == NULL)
+    {
+        snprintf(response, responseSize, "Channel %s does not exist", name);
+        return false;
+    }
+
+    if (isChannelFull(name))
+    {
+        snprintf(response, responseSize, "This channel is full, you cannot join it");
+        return false;
+    }
+
+    char *currentChannel = getClientChannelName(clientSocket);
+    if (currentChannel != NULL)
+    {
+        removeClient(currentChannel, clientSocket);
+    }
+
+    addClient(name, clientSocket);
+
+    snprintf(response, responseSize, "You have joined %s", name);
+    return true;
+}
+
+void sendToAllChannelMembers(int clientSocket, const char *message)
+{
+    Channel *channel = getClientChannel(clientSocket);
+    if (channel == NULL)
+    {
+        fprintf(stderr, "Client is not in any channel\n");
+        return;
+    }
+
+    Node *current = channel->clients->first;
+    while (current != NULL)
+    {
+        send(current->val, message, strlen(message) + 1, 0);
+        current = current->next;
+    }
+}
