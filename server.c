@@ -202,6 +202,7 @@ int main()
         pthread_detach(thread_id);
     }
 
+    deleteList(client_sockets);
     free(client_sockets);
     close(dSock);
     pthread_mutex_destroy(&clients_mutex);

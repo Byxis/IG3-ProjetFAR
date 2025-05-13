@@ -181,3 +181,18 @@ void removeElement(List *c, int val)
         current = current->next;
     }
 }
+
+void deleteList(List *c)
+{
+    if (c == NULL)
+        return;
+
+    Node *current = c->first;
+    while (current != NULL)
+    {
+        Node *temp = current;
+        current = current->next;
+        free(temp);
+    }
+    free(c);
+}
