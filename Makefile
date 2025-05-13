@@ -2,35 +2,26 @@ CC = gcc
 CFLAGS = -Wall -Wextra -g
 LDFLAGS = -pthread
 
-# Source files and targets
-SRC_DIR = .
-CLIENT_SRC = $(SRC_DIR)/client.c
-SERVER_SRC = $(SRC_DIR)/server.c
-CHAINED_LIST_SRC = $(SRC_DIR)/ChainedList.c
+# Object files
+SERVER_OBJS = server.o ChainedList.o user.o command.o file.o cJSON.o
+CLIENT_OBJS = client.o
 
-CLIENT = client
-SERVER = server
-CHAINED_LIST_OBJ = ChainedList.o
+# Targets
+all: server client
 
-all: $(CLIENT) $(SERVER)
+# Server build
+server: $(SERVER_OBJS)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
-$(CHAINED_LIST_OBJ): $(CHAINED_LIST_SRC)
+# Client build (only needs client.o)
+client: $(CLIENT_OBJS)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+# Object files compilation
+%.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
-
-$(CLIENT): $(CLIENT_SRC) $(CHAINED_LIST_OBJ)
-	$(CC) $(CFLAGS) -o $@ $(CLIENT_SRC) $(CHAINED_LIST_OBJ) $(LDFLAGS)
-
-$(SERVER): $(SERVER_SRC) $(CHAINED_LIST_OBJ)
-	$(CC) $(CFLAGS) -o $@ $(SERVER_SRC) $(CHAINED_LIST_OBJ) $(LDFLAGS)
 
 clean:
-	rm -f $(CLIENT) $(SERVER) *.o
-
-# For individual compilation if needed
-client.o: $(CLIENT_SRC)
-	$(CC) $(CFLAGS) -c $< -o $@
-
-server.o: $(SERVER_SRC)
-	$(CC) $(CFLAGS) -c $< -o $@
+	rm -f *.o server client
 
 .PHONY: all clean
