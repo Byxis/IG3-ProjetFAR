@@ -94,6 +94,7 @@ static void *createChannel(char *name, int maxSize, int clientSocket)
     newChannel->clients = createList(clientSocket);
     newChannel->next = channelList.first->next;
     channelList.first->next = newChannel;
+    return newChannel;
 }
 
 static Channel *getChannel(char *name)
@@ -133,6 +134,10 @@ static int getChannelSize(char *name)
     {
         fprintf(stderr, "Channel not found\n");
         return -1;
+    }
+    if (strcmp(channel->name, "Hub") == 0)
+    {
+        return channel->clients->size - 1;
     }
     return channel->clients->size;
 }
@@ -278,17 +283,13 @@ void sendChannelMessage(int clientSocket, const char *message)
     }
 }
 
-bool leaveChannel(char *name, int clientSocket, char *response, size_t responseSize)
+bool leaveChannel(int clientSocket, char *response, size_t responseSize)
 {
-    if (name == NULL || strlen(name) == 0)
-    {
-        return false;
-    }
-
     Channel *clientChannel = getClientChannel(clientSocket);
-    if (clientChannel == NULL || strcmp(clientChannel->name, name) != 0)
+    char *name = clientChannel->name;
+    if (clientChannel == NULL)
     {
-        snprintf(response, responseSize, "You are not in this channel");
+        snprintf(response, responseSize, "You are not in any channel");
         return false;
     }
 
@@ -298,10 +299,21 @@ bool leaveChannel(char *name, int clientSocket, char *response, size_t responseS
         return false;
     }
 
+    char *message = malloc(100);
+    if (message == NULL)
+    {
+        snprintf(response, responseSize, "Failed to allocate memory for message");
+        return false;
+    }
+    sprintf(message, "Client%d has left the channel %s (%d/%d)", clientSocket, name, getChannelSize(name) - 1, clientChannel->maxSize);
+    sendToAllNamedChannelMembers(name, message);
+
+    sprintf(message, "Client%d has joined the channel %s (%d/%d)", clientSocket, "Hub", getChannelSize("Hub"), -1);
+    sendToAllNamedChannelMembers("Hub", message);
+
     removeClient(name, clientSocket);
     addClient("Hub", clientSocket);
-
-    snprintf(response, responseSize, "You have left %s and automatically rejoined the Hub channel", name);
+    free(message);
     return true;
 }
 
@@ -330,26 +342,26 @@ bool createAndJoinChannel(char *name, int maxSize, int clientSocket, char *respo
         return false;
     }
 
-    Channel *newChannel = (Channel *)malloc(sizeof(Channel));
-    if (newChannel == NULL)
-    {
-        snprintf(response, responseSize, "Failed to allocate memory for new channel");
-        return false;
-    }
-    newChannel->name = strdup(name);
-    newChannel->maxSize = maxSize;
-    newChannel->clients = createList(-1);
-    newChannel->next = channelList.first->next;
-    channelList.first->next = newChannel;
+    Channel *newChannel = createChannel(name, maxSize, clientSocket);
 
     char *currentChannel = getClientChannelName(clientSocket);
     if (currentChannel != NULL && strcmp(currentChannel, name) != 0)
     {
+        char *message = malloc(100);
+        if (message == NULL)
+        {
+            snprintf(response, responseSize, "Failed to allocate memory for message");
+            return false;
+        }
+        sprintf(message, "Client%d has created a new channel named %s (%d/%d)", clientSocket, name, 1, maxSize);
+        sendToAllNamedChannelMembers(currentChannel, message);
+        free(message);
+
         removeClient(currentChannel, clientSocket);
     }
-    addClient(name, clientSocket);
 
-    snprintf(response, responseSize, "You have created and joined %s", name);
+    int currentSize = getChannelSize(name);
+    snprintf(response, responseSize, "You have created and joined %s (%d/%d)", name, currentSize, maxSize);
     return true;
 }
 
@@ -374,15 +386,35 @@ bool joinChannel(char *name, int clientSocket, char *response, size_t responseSi
         return false;
     }
 
-    char *currentChannel = getClientChannelName(clientSocket);
+    if (strcmp(getClientChannel(clientSocket)->name, name) == 0)
+    {
+        snprintf(response, responseSize, "You are already in this channel");
+        return false;
+    }
+
+    Channel *currentChannel = getClientChannel(clientSocket);
     if (currentChannel != NULL)
     {
-        removeClient(currentChannel, clientSocket);
+        removeClient(currentChannel->name, clientSocket);
     }
 
     addClient(name, clientSocket);
 
-    snprintf(response, responseSize, "You have joined %s", name);
+    int currentSize = getChannelSize(name);
+    snprintf(response, responseSize, "You have joined %s (%d/%d)", name, currentSize, channel->maxSize);
+    char *message = malloc(100);
+    if (message == NULL)
+    {
+        snprintf(response, responseSize, "Failed to allocate memory for message");
+        return false;
+    }
+    sprintf(message, "Client%d has joined the channel %s (%d/%d)", clientSocket, name, currentSize, channel->maxSize);
+    sendToAllNamedChannelMembers(name, message);
+
+    sprintf(message, "Client%d has left the channel %s (%d/%d)", clientSocket, currentChannel->name, getChannelSize(currentChannel->name), currentChannel->maxSize);
+    sendToAllNamedChannelMembers(name, message);
+
+    free(message);
     return true;
 }
 
@@ -400,5 +432,75 @@ void sendToAllChannelMembers(int clientSocket, const char *message)
     {
         send(current->val, message, strlen(message) + 1, 0);
         current = current->next;
+    }
+}
+
+void sendToAllNamedChannelMembersExcept(char *name, const char *message, int clientSocket)
+{
+    Channel *channel = getChannel(name);
+    if (channel == NULL)
+    {
+        fprintf(stderr, "Channel %s does not exist\n", name);
+        return;
+    }
+
+    Node *current = channel->clients->first;
+    while (current != NULL)
+    {
+        if (current->val != clientSocket)
+        {
+            send(current->val, message, strlen(message) + 1, 0);
+        }
+        current = current->next;
+    }
+}
+
+void sendToAllNamedChannelMembers(char *name, const char *message)
+{
+    Channel *channel = getChannel(name);
+    if (channel == NULL)
+    {
+        fprintf(stderr, "Channel %s does not exist\n", name);
+        return;
+    }
+
+    Node *current = channel->clients->first;
+    while (current != NULL)
+    {
+        send(current->val, message, strlen(message) + 1, 0);
+        current = current->next;
+    }
+}
+
+void sendInfoToAll(char *message)
+{
+    Channel *channel = channelList.first;
+    while (channel != NULL)
+    {
+        Node *current = channel->clients->first;
+        while (current != NULL)
+        {
+            send(current->val, message, strlen(message) + 1, 0);
+            current = current->next;
+        }
+        channel = channel->next;
+    }
+}
+
+void sendInfoToAllExcept(int clientSocket, char *message)
+{
+    Channel *channel = channelList.first;
+    while (channel != NULL)
+    {
+        Node *current = channel->clients->first;
+        while (current != NULL)
+        {
+            if (current->val != clientSocket)
+            {
+                send(current->val, message, strlen(message) + 1, 0);
+            }
+            current = current->next;
+        }
+        channel = channel->next;
     }
 }

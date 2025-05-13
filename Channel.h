@@ -27,7 +27,7 @@ void cleanupChannelSystem();
 // Public API for channel operations
 bool createAndJoinChannel(char *name, int maxSize, int clientSocket, char *response, size_t responseSize);
 bool joinChannel(char *name, int clientSocket, char *response, size_t responseSize);
-bool leaveChannel(char *name, int clientSocket, char *response, size_t responseSize);
+bool leaveChannel(int clientSocket, char *response, size_t responseSize);
 
 // Client-related functions used by server
 char *getClientChannelName(int clientSocket);
@@ -66,9 +66,10 @@ Client2: Hey, come chat with me on channel1 !
 Okay, I'm waiting for you
 Client2 has created a new channel named channel1 (1/10)
 @join channel1
+You have joined channel1 (2/10)
 Hey you !
 @leave channel1
-You have left channel1
+You have left channel1 (1/10)
 
 
     Client2:
@@ -76,7 +77,7 @@ You have left channel1
 Hey, come chat with me on channel1 !
 Client1: Okay, I'm waiting for you
 @create channel1 10
-You have created channel1
+You have created and joined channel1 (1/10)
 Client1 has joined the channel (2/10)
 Client1: Hey you !
 Client1 has left the channel (1/10)
