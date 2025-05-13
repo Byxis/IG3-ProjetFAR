@@ -84,15 +84,3 @@ void save_user(const char *pseudo, const char *mdp) {
 
 
 
-
-
-
-// description projet
-// but application
-// pourquoi TCP: 
-// décrire l'utilisation 
-
-
-// readme
-// projet ig3
-// comment compiler 
