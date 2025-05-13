@@ -6,7 +6,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <sys/time.h>
-#include <pthread.h> // Ajout de l'en-tête pthread
+#include <pthread.h>
 
 #define MAX_MESSAGE_SIZE 2000
 

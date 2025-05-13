@@ -5,8 +5,10 @@
 #include <stdbool.h>
 #include <sys/socket.h>
 #include <stdarg.h>
+
 #define MESSAGE_BUFFER_SIZE 256
 #define MESSAGE_BUFFER_COUNT 10
+
 static char messageBuffers[MESSAGE_BUFFER_COUNT][MESSAGE_BUFFER_SIZE];
 static int currentBufferIndex = 0;
 
@@ -22,6 +24,11 @@ static bool isChannelEmpty(char *name);
 static void *createChannel(char *name, int maxSize, int clientSocket);
 static void removeChannel(char *name);
 
+/**
+ ** Get a buffer for formatted messages.
+ * This function uses a circular buffer to reuse message buffers.
+ * @return {char*} buffer - A pointer to a buffer for formatted messages.
+ */
 static char *getMessageBuffer()
 {
     char *buffer = messageBuffers[currentBufferIndex];
@@ -29,6 +36,13 @@ static char *getMessageBuffer()
     return buffer;
 }
 
+/**
+ ** Format a message using a format string and variable arguments.
+ * This function uses a circular buffer to reuse message buffers.
+ * @param {const char*} format - The format string.
+ * @param {...} - The variable arguments to format the message.
+ * @return {char*} buffer - A pointer to the formatted message.
+ */
 static char *formatMessage(const char *format, ...)
 {
     char *buffer = getMessageBuffer();
@@ -39,6 +53,13 @@ static char *formatMessage(const char *format, ...)
     return buffer;
 }
 
+/**
+ ** Send a formatted message to all members of a channel.
+ * This function uses a circular buffer to reuse message buffers.
+ * @param {char*} channelName - The name of the channel.
+ * @param {const char*} format - The format string.
+ * @param {...} - The variable arguments to format the message.
+ */
 static void sendFormattedChannelMessage(char *channelName, const char *format, ...)
 {
     char *buffer = getMessageBuffer();
@@ -49,6 +70,10 @@ static void sendFormattedChannelMessage(char *channelName, const char *format, .
     sendToAllNamedChannelMembers(channelName, buffer);
 }
 
+/**
+ ** Initialize the channel system.
+ * This function creates the Hub channel and initializes the channel list.
+ */
 void initChannelSystem()
 {
     Channel *channel = (Channel *)malloc(sizeof(Channel));
@@ -64,6 +89,10 @@ void initChannelSystem()
     channelList.first = channel;
 }
 
+/**
+ ** Cleanup the channel system.
+ * This function frees all memory associated with the channels and their clients.
+ */
 void cleanupChannelSystem()
 {
     Channel *current = channelList.first;
@@ -90,7 +119,14 @@ void cleanupChannelSystem()
     channelList.first = NULL;
 }
 
-static void *createChannel(char *name, int maxSize, int clientSocket)
+/**
+ ** Create a new channel, with the specified name and maximum size.
+ * @param {char*} {char *} name - The name of the channel.
+ * @param {int} maxSize - The maximum size of the channel (-1 for unlimited).
+ * @param {int} clientSocket - The socket of the client creating the channel.
+ * @return {Channel *} newChannel - A pointer to the newly created channel, or NULL on failure.
+ */
+static Channel *createChannel(char *name, int maxSize, int clientSocket)
 {
     if (name == NULL || strlen(name) == 0)
     {
@@ -129,6 +165,11 @@ static void *createChannel(char *name, int maxSize, int clientSocket)
     return newChannel;
 }
 
+/**
+ ** Get a channel by its name.
+ * @param {char *} name - The name of the channel.
+ * @return {Channel *} channel - A pointer to the channel, or NULL if not found.
+ */
 static Channel *getChannel(char *name)
 {
     Channel *channel = channelList.first;
@@ -143,6 +184,11 @@ static Channel *getChannel(char *name)
     return NULL;
 }
 
+/**
+ ** Check if a channel is full.
+ * @param {char *} name - The name of the channel.
+ * @return {bool} - true if the channel is full, false otherwise.
+ */
 static bool isChannelFull(char *name)
 {
     Channel *channel = getChannel(name);
@@ -159,6 +205,11 @@ static bool isChannelFull(char *name)
     return channel->clients->size > channel->maxSize;
 }
 
+/**
+ ** Get the size of a channel.
+ * @param {char *} name - The name of the channel.
+ * @return {int} - The size of the channel, or -1 if not found.
+ */
 static int getChannelSize(char *name)
 {
     Channel *channel = getChannel(name);
@@ -174,6 +225,11 @@ static int getChannelSize(char *name)
     return channel->clients->size;
 }
 
+/**
+ ** Check if a channel is empty.
+ * @param {char *} name - The name of the channel.
+ * @return {bool} - true if the channel is empty, false otherwise.
+ */
 static bool isChannelEmpty(char *name)
 {
     Channel *channel = getChannel(name);
@@ -191,6 +247,11 @@ static bool isChannelEmpty(char *name)
     return false;
 }
 
+/**
+ ** Get the name of the channel a client is in.
+ * @param clientSocket The socket of the client.
+ * @return {char *} The name of the channel, or NULL if not found.
+ */
 char *getClientChannelName(int clientSocket)
 {
     Channel *channel = getClientChannel(clientSocket);
@@ -201,6 +262,11 @@ char *getClientChannelName(int clientSocket)
     return NULL;
 }
 
+/**
+ ** Get the channel a client is in.
+ * @param clientSocket The socket of the client.
+ * @return {Channel *} A pointer to the channel, or NULL if not found.
+ */
 Channel *getClientChannel(int clientSocket)
 {
     Channel *channel = channelList.first;
@@ -220,6 +286,11 @@ Channel *getClientChannel(int clientSocket)
     return NULL;
 }
 
+/**
+ ** Add a client to a specified channel name.
+ * @param {char *} name - The name of the channel.
+ * @param {int} clientSocket - The socket of the client.
+ */
 void addClient(char *name, int clientSocket)
 {
     Channel *channel = channelList.first;
@@ -239,6 +310,11 @@ void addClient(char *name, int clientSocket)
     }
 }
 
+/**
+ ** Remove a client from a specified channel name.
+ * @param {char *} name - The name of the channel.
+ * @param {int} clientSocket - The socket of the client.
+ */
 void removeClient(char *name, int clientSocket)
 {
     Channel *channel = channelList.first;
@@ -257,6 +333,10 @@ void removeClient(char *name, int clientSocket)
     }
 }
 
+/**
+ ** Remove a channel by its name.
+ * @param {char *} name - The name of the channel.
+ */
 static void removeChannel(char *name)
 {
     if (name == NULL || strlen(name) == 0)
@@ -296,6 +376,11 @@ static void removeChannel(char *name)
     }
 }
 
+/**
+ ** Send a message to all clients in the channel of the specified client.
+ * @param {int} clientSocket - The socket of the client.
+ * @param {const char*} message - The message to send.
+ */
 void sendChannelMessage(int clientSocket, const char *message)
 {
     Channel *channel = getClientChannel(clientSocket);
@@ -315,6 +400,13 @@ void sendChannelMessage(int clientSocket, const char *message)
     }
 }
 
+/**
+ ** Leave the channel of the specified client.
+ * @param {int} clientSocket - The socket of the client.
+ * @param {char*} response - The response message.
+ * @param {size_t} responseSize - The size of the response buffer.
+ * @return {bool} - true if successful, false otherwise.
+ */
 bool leaveChannel(int clientSocket, char *response, size_t responseSize)
 {
     Channel *clientChannel = getClientChannel(clientSocket);
@@ -341,6 +433,15 @@ bool leaveChannel(int clientSocket, char *response, size_t responseSize)
     return true;
 }
 
+/**
+ ** Create and join a new channel.
+ * @param {char*} name - The name of the channel.
+ * @param {int} maxSize - The maximum size of the channel (-1 for unlimited).
+ * @param {int} clientSocket - The socket of the client.
+ * @param {char*} response - The response message.
+ * @param {size_t} responseSize - The size of the response buffer.
+ * @return {bool} - true if successful, false otherwise.
+ */
 bool createAndJoinChannel(char *name, int maxSize, int clientSocket, char *response, size_t responseSize)
 {
     if (name == NULL || strlen(name) == 0)
@@ -382,6 +483,14 @@ bool createAndJoinChannel(char *name, int maxSize, int clientSocket, char *respo
     return true;
 }
 
+/**
+ ** Join an existing channel.
+ * @param {char*} name - The name of the channel.
+ * @param {int} clientSocket - The socket of the client.
+ * @param {char*} response - The response message.
+ * @param {size_t} responseSize - The size of the response buffer.
+ * @return {bool} - true if successful, false otherwise.
+ */
 bool joinChannel(char *name, int clientSocket, char *response, size_t responseSize)
 {
     if (name == NULL || strlen(name) == 0)
@@ -431,6 +540,11 @@ bool joinChannel(char *name, int clientSocket, char *response, size_t responseSi
     return true;
 }
 
+/**
+ ** Send a message to all members of the channel of the specified client.
+ * @param {int} clientSocket - The socket of the client.
+ * @param {const char*} message - The message to send.
+ */
 void sendToAllChannelMembers(int clientSocket, const char *message)
 {
     Channel *channel = getClientChannel(clientSocket);
@@ -448,6 +562,12 @@ void sendToAllChannelMembers(int clientSocket, const char *message)
     }
 }
 
+/**
+ ** Send a message to all members of a specified channel, except the sender.
+ * @param {char*} name - The name of the channel.
+ * @param {const char*} message - The message to send.
+ * @param {int} clientSocket - The socket of the sender.
+ */
 void sendToAllNamedChannelMembersExcept(char *name, const char *message, int clientSocket)
 {
     Channel *channel = getChannel(name);
@@ -468,6 +588,11 @@ void sendToAllNamedChannelMembersExcept(char *name, const char *message, int cli
     }
 }
 
+/**
+ ** Send a message to all members of a specified channel.
+ * @param {char*} name - The name of the channel.
+ * @param {const char*} message - The message to send.
+ */
 void sendToAllNamedChannelMembers(char *name, const char *message)
 {
     Channel *channel = getChannel(name);
@@ -485,6 +610,10 @@ void sendToAllNamedChannelMembers(char *name, const char *message)
     }
 }
 
+/**
+ ** Send a message to all clients in all channels.
+ * @param {char*} message - The message to send.
+ */
 void sendInfoToAll(char *message)
 {
     Channel *channel = channelList.first;
@@ -500,6 +629,11 @@ void sendInfoToAll(char *message)
     }
 }
 
+/**
+ ** Send a message to all clients in all channels, except the sender.
+ * @param {int} clientSocket - The socket of the sender.
+ * @param {char*} message - The message to send.
+ */
 void sendInfoToAllExcept(int clientSocket, char *message)
 {
     Channel *channel = channelList.first;
