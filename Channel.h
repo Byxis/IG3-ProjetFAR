@@ -38,6 +38,10 @@ void removeClient(char *name, int clientSocket);
 // Message sending functions
 void sendChannelMessage(int clientSocket, const char *message);
 void sendToAllChannelMembers(int clientSocket, const char *message);
+void sendToAllNamedChannelMembers(char *name, const char *message);
+void sendToAllNamedChannelMembersExcept(char *name, const char *message, int clientSocket);
+void sendInfoToAll(char *message);
+void sendInfoToAllExcept(int clientSocket, char *message);
 
 #endif // CHANNEL_H
 

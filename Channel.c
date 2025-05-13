@@ -4,6 +4,11 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <sys/socket.h>
+#include <stdarg.h>
+#define MESSAGE_BUFFER_SIZE 256
+#define MESSAGE_BUFFER_COUNT 10
+static char messageBuffers[MESSAGE_BUFFER_COUNT][MESSAGE_BUFFER_SIZE];
+static int currentBufferIndex = 0;
 
 static struct
 {
@@ -16,6 +21,33 @@ static int getChannelSize(char *name);
 static bool isChannelEmpty(char *name);
 static void *createChannel(char *name, int maxSize, int clientSocket);
 static void removeChannel(char *name);
+
+static char *getMessageBuffer()
+{
+    char *buffer = messageBuffers[currentBufferIndex];
+    currentBufferIndex = (currentBufferIndex + 1) % MESSAGE_BUFFER_COUNT;
+    return buffer;
+}
+
+static char *formatMessage(const char *format, ...)
+{
+    char *buffer = getMessageBuffer();
+    va_list args;
+    va_start(args, format);
+    vsnprintf(buffer, MESSAGE_BUFFER_SIZE, format, args);
+    va_end(args);
+    return buffer;
+}
+
+static void sendFormattedChannelMessage(char *channelName, const char *format, ...)
+{
+    char *buffer = getMessageBuffer();
+    va_list args;
+    va_start(args, format);
+    vsnprintf(buffer, MESSAGE_BUFFER_SIZE, format, args);
+    va_end(args);
+    sendToAllNamedChannelMembers(channelName, buffer);
+}
 
 void initChannelSystem()
 {
@@ -286,34 +318,26 @@ void sendChannelMessage(int clientSocket, const char *message)
 bool leaveChannel(int clientSocket, char *response, size_t responseSize)
 {
     Channel *clientChannel = getClientChannel(clientSocket);
-    char *name = clientChannel->name;
     if (clientChannel == NULL)
     {
         snprintf(response, responseSize, "You are not in any channel");
         return false;
     }
 
+    char *name = clientChannel->name;
     if (strcmp(name, "Hub") == 0)
     {
         snprintf(response, responseSize, "You cannot leave the Hub channel");
         return false;
     }
+    sendFormattedChannelMessage(name, "Client%d has left the channel %s (%d/%d)",
+                                clientSocket, name, getChannelSize(name) - 1, clientChannel->maxSize);
 
-    char *message = malloc(100);
-    if (message == NULL)
-    {
-        snprintf(response, responseSize, "Failed to allocate memory for message");
-        return false;
-    }
-    sprintf(message, "Client%d has left the channel %s (%d/%d)", clientSocket, name, getChannelSize(name) - 1, clientChannel->maxSize);
-    sendToAllNamedChannelMembers(name, message);
-
-    sprintf(message, "Client%d has joined the channel %s (%d/%d)", clientSocket, "Hub", getChannelSize("Hub"), -1);
-    sendToAllNamedChannelMembers("Hub", message);
+    sendFormattedChannelMessage("Hub", "Client%d has joined the channel %s (%d/%d)",
+                                clientSocket, "Hub", getChannelSize("Hub"), -1);
 
     removeClient(name, clientSocket);
     addClient("Hub", clientSocket);
-    free(message);
     return true;
 }
 
@@ -347,15 +371,8 @@ bool createAndJoinChannel(char *name, int maxSize, int clientSocket, char *respo
     char *currentChannel = getClientChannelName(clientSocket);
     if (currentChannel != NULL && strcmp(currentChannel, name) != 0)
     {
-        char *message = malloc(100);
-        if (message == NULL)
-        {
-            snprintf(response, responseSize, "Failed to allocate memory for message");
-            return false;
-        }
-        sprintf(message, "Client%d has created a new channel named %s (%d/%d)", clientSocket, name, 1, maxSize);
-        sendToAllNamedChannelMembers(currentChannel, message);
-        free(message);
+        sendFormattedChannelMessage(currentChannel, "Client%d has created a new channel named %s (%d/%d)",
+                                    clientSocket, name, 1, maxSize);
 
         removeClient(currentChannel, clientSocket);
     }
@@ -402,19 +419,15 @@ bool joinChannel(char *name, int clientSocket, char *response, size_t responseSi
 
     int currentSize = getChannelSize(name);
     snprintf(response, responseSize, "You have joined %s (%d/%d)", name, currentSize, channel->maxSize);
-    char *message = malloc(100);
-    if (message == NULL)
-    {
-        snprintf(response, responseSize, "Failed to allocate memory for message");
-        return false;
-    }
-    sprintf(message, "Client%d has joined the channel %s (%d/%d)", clientSocket, name, currentSize, channel->maxSize);
-    sendToAllNamedChannelMembers(name, message);
 
-    sprintf(message, "Client%d has left the channel %s (%d/%d)", clientSocket, currentChannel->name, getChannelSize(currentChannel->name), currentChannel->maxSize);
-    sendToAllNamedChannelMembers(name, message);
+    // Utiliser les buffers pré-formatés
+    sendFormattedChannelMessage(name, "Client%d has joined the channel %s (%d/%d)",
+                                clientSocket, name, currentSize, channel->maxSize);
 
-    free(message);
+    sendFormattedChannelMessage(currentChannel->name, "Client%d has left the channel %s (%d/%d)",
+                                clientSocket, currentChannel->name,
+                                getChannelSize(currentChannel->name), currentChannel->maxSize);
+
     return true;
 }
 
