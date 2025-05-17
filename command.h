@@ -8,26 +8,27 @@
 #define MAX_COMMAND_LENGTH 20
 
 // Enumération des types de commandes
-typedef enum command{
+typedef enum command
+{
     COMMAND,
-    PING, 
-    MSG, 
-    HELP, 
+    PING,
+    MSG,
+    HELP,
     CREDITS,
-    CONNECT, 
-    SHUTDOWN, 
+    CONNECT,
+    SHUTDOWN,
     CREATE,
-    JOIN, 
-    LEAVE, 
-    UPLOAD, 
-    DOWNLOAD, 
+    JOIN,
+    LEAVE,
+    UPLOAD,
+    DOWNLOAD,
     UNKNOWN,
-} Command; 
+} Command;
 
 // Fonction pour parser une commande à partir d'une chaîne
 Command parseCommand(const char *msg);
 
 // Fonction pour exécuter une commande
-void executeCommand(int sock, char* msg, int shutdown);
+void executeCommand(int sock, char *msg);
 
 #endif

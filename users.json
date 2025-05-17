@@ -1,32 +1,45 @@
-[
-  {
-      "username": "admin",
-      "password": "admin123",
-      "role": "ADMIN"
-  },
-  {
-      "username": "user1",
-      "password": "pass1",
-      "role": "USER"
-  },
-  {
-      "username": "user2",
-      "password": "pass2",
-      "role": "USER"
-  },
-  {
-      "username": "user3",
-      "password": "pass3",
-      "role": "USER"
-  },
-  {
-      "username": "user4",
-      "password": "pass4",
-      "role": "USER"
-  },
-  {
-      "username": "user5",
-      "password": "pass5",
-      "role": "USER"
-  }
-]
+[{
+		"username":	"A",
+		"password":	"A",
+		"role":	"USER"
+	}, {
+		"username":	"dza",
+		"password":	"a",
+		"role":	"USER"
+	}, {
+		"username":	"a",
+		"password":	"a",
+		"role":	"ADMIN"
+	}, {
+		"username":	"z",
+		"password":	"z",
+		"role":	"USER"
+	}, {
+		"username":	"admin",
+		"password":	"admin123",
+		"role":	"ADMIN"
+	}, {
+		"username":	"user1",
+		"password":	"pass1",
+		"role":	"USER"
+	}, {
+		"username":	"user2",
+		"password":	"pass2",
+		"role":	"USER"
+	}, {
+		"username":	"user3",
+		"password":	"pass3",
+		"role":	"USER"
+	}, {
+		"username":	"user4",
+		"password":	"pass4",
+		"role":	"USER"
+	}, {
+		"username":	"user5",
+		"password":	"pass5",
+		"role":	"USER"
+	}, {
+		"username":	"dazda",
+		"password":	"a",
+		"role":	"USER"
+	}]

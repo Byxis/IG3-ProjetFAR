@@ -7,12 +7,14 @@
 extern List *client_sockets;
 extern pthread_mutex_t clients_mutex;
 
-typedef enum {
+typedef enum
+{
     USER,
     ADMIN
 } Role;
 
-typedef struct user {
+typedef struct user
+{
     char name[50];
     char password[50];
     Role role;
@@ -30,8 +32,8 @@ void *handleClient(void *arg);
 User *findUserByName(const char *name);
 Role getRoleByName(const char *name);
 void registerUser(const char *pseudo, const char *password, int socket_fd, struct sockaddr_in ad);
+void saveUsersToJson(const char *filename);
+void loadUsersFromJson(const char *filename);
+User *findUserBySocket(int sock);
 
 #endif
-
-
-
