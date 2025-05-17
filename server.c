@@ -10,7 +10,6 @@
 #define MAX_CLIENTS 10
 
 List *client_sockets;
-pthread_mutex_t clients_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 // Function prototypes
 void sendAllClients(const char *message);
@@ -21,14 +20,11 @@ void *handleClient(void *arg);
 
 void addClient(int sock)
 {
-    pthread_mutex_lock(&clients_mutex);
     addLast(client_sockets, sock);
-    pthread_mutex_unlock(&clients_mutex);
 }
 
 void removeClient(int socket_fd)
 {
-    pthread_mutex_lock(&clients_mutex);
 
     if (!isListEmpty(client_sockets))
     {
@@ -44,17 +40,13 @@ void removeClient(int socket_fd)
         }
         removeElement(client_sockets, socket_fd);
     }
-
-    pthread_mutex_unlock(&clients_mutex);
 }
 
 void sendClient(int socket_fd, const char *message)
 {
-    pthread_mutex_lock(&clients_mutex);
 
     if (isListEmpty(client_sockets))
     {
-        pthread_mutex_unlock(&clients_mutex);
         return;
     }
 
@@ -68,17 +60,13 @@ void sendClient(int socket_fd, const char *message)
         }
         current = current->next;
     }
-
-    pthread_mutex_unlock(&clients_mutex);
 }
 
 void sendAllClients(const char *message)
 {
-    pthread_mutex_lock(&clients_mutex);
 
     if (isListEmpty(client_sockets))
     {
-        pthread_mutex_unlock(&clients_mutex);
         return;
     }
 
@@ -88,8 +76,6 @@ void sendAllClients(const char *message)
         send(current->val, message, strlen(message) + 1, 0);
         current = current->next;
     }
-
-    pthread_mutex_unlock(&clients_mutex);
 }
 
 void *handleClient(void *arg)
@@ -205,6 +191,5 @@ int main()
     deleteList(client_sockets);
     free(client_sockets);
     close(dSock);
-    pthread_mutex_destroy(&clients_mutex);
     return 0;
 }

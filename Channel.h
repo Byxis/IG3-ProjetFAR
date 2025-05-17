@@ -32,8 +32,8 @@ bool leaveChannel(int clientSocket, char *response, size_t responseSize);
 // Client-related functions used by server
 char *getClientChannelName(int clientSocket);
 Channel *getClientChannel(int clientSocket);
-void addClient(char *name, int clientSocket);
-void removeClient(char *name, int clientSocket);
+void addClientToChannel(char *name, int clientSocket);
+void removeClientFromChannel(char *name, int clientSocket);
 
 // Message sending functions
 void sendChannelMessage(int clientSocket, const char *message);

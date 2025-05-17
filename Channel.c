@@ -5,12 +5,15 @@
 #include <stdbool.h>
 #include <sys/socket.h>
 #include <stdarg.h>
+#include <pthread.h>
 
 #define MESSAGE_BUFFER_SIZE 256
 #define MESSAGE_BUFFER_COUNT 10
 
 static char messageBuffers[MESSAGE_BUFFER_COUNT][MESSAGE_BUFFER_SIZE];
 static int currentBufferIndex = 0;
+
+pthread_mutex_t clients_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 static struct
 {
@@ -21,8 +24,17 @@ static Channel *getChannel(char *name);
 static bool isChannelFull(char *name);
 static int getChannelSize(char *name);
 static bool isChannelEmpty(char *name);
-static void *createChannel(char *name, int maxSize, int clientSocket);
+static Channel *createChannel(char *name, int maxSize, int clientSocket);
 static void removeChannel(char *name);
+static void lock_mutex()
+{
+    pthread_mutex_lock(&clients_mutex);
+}
+
+static void unlock_mutex()
+{
+    pthread_mutex_unlock(&clients_mutex);
+}
 
 /**
  ** Get a buffer for formatted messages.
@@ -76,10 +88,12 @@ static void sendFormattedChannelMessage(char *channelName, const char *format, .
  */
 void initChannelSystem()
 {
+    lock_mutex();
     Channel *channel = (Channel *)malloc(sizeof(Channel));
     if (channel == NULL)
     {
         perror("Failed to allocate memory for channel");
+        unlock_mutex();
         exit(EXIT_FAILURE);
     }
     channel->name = strdup("Hub");
@@ -87,6 +101,7 @@ void initChannelSystem()
     channel->clients = createList(-1);
     channel->next = NULL;
     channelList.first = channel;
+    unlock_mutex();
 }
 
 /**
@@ -95,6 +110,7 @@ void initChannelSystem()
  */
 void cleanupChannelSystem()
 {
+    lock_mutex();
     Channel *current = channelList.first;
     Channel *next;
 
@@ -117,6 +133,8 @@ void cleanupChannelSystem()
         current = next;
     }
     channelList.first = NULL;
+    unlock_mutex();
+    pthread_mutex_destroy(&clients_mutex);
 }
 
 /**
@@ -128,9 +146,11 @@ void cleanupChannelSystem()
  */
 static Channel *createChannel(char *name, int maxSize, int clientSocket)
 {
+    lock_mutex();
     if (name == NULL || strlen(name) == 0)
     {
         fprintf(stderr, "Channel name cannot be empty\n");
+        unlock_mutex();
         return NULL;
     }
 
@@ -140,6 +160,7 @@ static Channel *createChannel(char *name, int maxSize, int clientSocket)
         if (strcmp(existingChannel->name, name) == 0)
         {
             fprintf(stderr, "Channel with this name already exists\n");
+            unlock_mutex();
             return NULL;
         }
         existingChannel = existingChannel->next;
@@ -148,6 +169,7 @@ static Channel *createChannel(char *name, int maxSize, int clientSocket)
     if (maxSize < -1)
     {
         fprintf(stderr, "Invalid max size for channel\n");
+        unlock_mutex();
         return NULL;
     }
 
@@ -155,6 +177,7 @@ static Channel *createChannel(char *name, int maxSize, int clientSocket)
     if (newChannel == NULL)
     {
         perror("Failed to allocate memory for new channel");
+        unlock_mutex();
         return NULL;
     }
     newChannel->name = strdup(name);
@@ -162,6 +185,7 @@ static Channel *createChannel(char *name, int maxSize, int clientSocket)
     newChannel->clients = createList(clientSocket);
     newChannel->next = channelList.first->next;
     channelList.first->next = newChannel;
+    unlock_mutex();
     return newChannel;
 }
 
@@ -172,15 +196,18 @@ static Channel *createChannel(char *name, int maxSize, int clientSocket)
  */
 static Channel *getChannel(char *name)
 {
+    lock_mutex();
     Channel *channel = channelList.first;
     while (channel != NULL)
     {
         if (strcmp(channel->name, name) == 0)
         {
+            unlock_mutex();
             return channel;
         }
         channel = channel->next;
     }
+    unlock_mutex();
     return NULL;
 }
 
@@ -191,18 +218,23 @@ static Channel *getChannel(char *name)
  */
 static bool isChannelFull(char *name)
 {
+    lock_mutex();
     Channel *channel = getChannel(name);
     if (channel == NULL)
     {
         fprintf(stderr, "Channel not found\n");
+        unlock_mutex();
         return false;
     }
     if (channel->maxSize == -1)
     {
+        unlock_mutex();
         return false;
     }
 
-    return channel->clients->size > channel->maxSize;
+    bool result = channel->clients->size > channel->maxSize;
+    unlock_mutex();
+    return result;
 }
 
 /**
@@ -212,17 +244,25 @@ static bool isChannelFull(char *name)
  */
 static int getChannelSize(char *name)
 {
+    lock_mutex();
     Channel *channel = getChannel(name);
     if (channel == NULL)
     {
         fprintf(stderr, "Channel not found\n");
+        unlock_mutex();
         return -1;
     }
+    int size;
     if (strcmp(channel->name, "Hub") == 0)
     {
-        return channel->clients->size - 1;
+        size = channel->clients->size - 1;
     }
-    return channel->clients->size;
+    else
+    {
+        size = channel->clients->size;
+    }
+    unlock_mutex();
+    return size;
 }
 
 /**
@@ -232,18 +272,22 @@ static int getChannelSize(char *name)
  */
 static bool isChannelEmpty(char *name)
 {
+    lock_mutex();
     Channel *channel = getChannel(name);
     if (channel == NULL)
     {
         fprintf(stderr, "Channel not found\n");
+        unlock_mutex();
         return false;
     }
     if (isListEmpty(channel->clients))
     {
         fprintf(stderr, "Channel is empty\n");
+        unlock_mutex();
         return true;
     }
     fprintf(stderr, "Channel is not empty\n");
+    unlock_mutex();
     return false;
 }
 
@@ -254,11 +298,15 @@ static bool isChannelEmpty(char *name)
  */
 char *getClientChannelName(int clientSocket)
 {
+    lock_mutex();
     Channel *channel = getClientChannel(clientSocket);
     if (channel != NULL)
     {
-        return channel->name;
+        char *name = channel->name;
+        unlock_mutex();
+        return name;
     }
+    unlock_mutex();
     return NULL;
 }
 
@@ -269,6 +317,7 @@ char *getClientChannelName(int clientSocket)
  */
 Channel *getClientChannel(int clientSocket)
 {
+    lock_mutex();
     Channel *channel = channelList.first;
     while (channel != NULL)
     {
@@ -277,12 +326,14 @@ Channel *getClientChannel(int clientSocket)
         {
             if (current->val == clientSocket)
             {
+                unlock_mutex();
                 return channel;
             }
             current = current->next;
         }
         channel = channel->next;
     }
+    unlock_mutex();
     return NULL;
 }
 
@@ -291,8 +342,9 @@ Channel *getClientChannel(int clientSocket)
  * @param {char *} name - The name of the channel.
  * @param {int} clientSocket - The socket of the client.
  */
-void addClient(char *name, int clientSocket)
+void addClientToChannel(char *name, int clientSocket)
 {
+    lock_mutex();
     Channel *channel = channelList.first;
     while (channel != NULL)
     {
@@ -301,13 +353,16 @@ void addClient(char *name, int clientSocket)
             if (isChannelFull(name))
             {
                 fprintf(stderr, "Channel is full, cannot add client\n");
+                unlock_mutex();
                 return;
             }
             addLast(channel->clients, clientSocket);
+            unlock_mutex();
             return;
         }
         channel = channel->next;
     }
+    unlock_mutex();
 }
 
 /**
@@ -315,8 +370,9 @@ void addClient(char *name, int clientSocket)
  * @param {char *} name - The name of the channel.
  * @param {int} clientSocket - The socket of the client.
  */
-void removeClient(char *name, int clientSocket)
+void removeClientFromChannel(char *name, int clientSocket)
 {
+    lock_mutex();
     Channel *channel = channelList.first;
     while (channel != NULL)
     {
@@ -327,10 +383,12 @@ void removeClient(char *name, int clientSocket)
             {
                 removeChannel(name);
             }
+            unlock_mutex();
             return;
         }
         channel = channel->next;
     }
+    unlock_mutex();
 }
 
 /**
@@ -339,15 +397,18 @@ void removeClient(char *name, int clientSocket)
  */
 static void removeChannel(char *name)
 {
+    lock_mutex();
     if (name == NULL || strlen(name) == 0)
     {
         fprintf(stderr, "Channel name cannot be empty\n");
+        unlock_mutex();
         return;
     }
 
     if (strcmp(channelList.first->name, name) == 0)
     {
         fprintf(stderr, "Cannot remove the hub channel\n");
+        unlock_mutex();
         return;
     }
 
@@ -369,11 +430,13 @@ static void removeChannel(char *name)
             deleteList(current->clients);
             free(current->name);
             free(current);
+            unlock_mutex();
             return;
         }
         previous = current;
         current = current->next;
     }
+    unlock_mutex();
 }
 
 /**
@@ -383,10 +446,12 @@ static void removeChannel(char *name)
  */
 void sendChannelMessage(int clientSocket, const char *message)
 {
+    lock_mutex();
     Channel *channel = getClientChannel(clientSocket);
     if (channel == NULL)
     {
         fprintf(stderr, "Client is not in any channel\n");
+        unlock_mutex();
         return;
     }
     Node *current = channel->clients->first;
@@ -398,6 +463,7 @@ void sendChannelMessage(int clientSocket, const char *message)
         }
         current = current->next;
     }
+    unlock_mutex();
 }
 
 /**
@@ -409,10 +475,12 @@ void sendChannelMessage(int clientSocket, const char *message)
  */
 bool leaveChannel(int clientSocket, char *response, size_t responseSize)
 {
+    lock_mutex();
     Channel *clientChannel = getClientChannel(clientSocket);
     if (clientChannel == NULL)
     {
         snprintf(response, responseSize, "You are not in any channel");
+        unlock_mutex();
         return false;
     }
 
@@ -420,16 +488,21 @@ bool leaveChannel(int clientSocket, char *response, size_t responseSize)
     if (strcmp(name, "Hub") == 0)
     {
         snprintf(response, responseSize, "You cannot leave the Hub channel");
+        unlock_mutex();
         return false;
     }
+
+    unlock_mutex();
     sendFormattedChannelMessage(name, "Client%d has left the channel %s (%d/%d)",
                                 clientSocket, name, getChannelSize(name) - 1, clientChannel->maxSize);
 
     sendFormattedChannelMessage("Hub", "Client%d has joined the channel %s (%d/%d)",
                                 clientSocket, "Hub", getChannelSize("Hub"), -1);
 
-    removeClient(name, clientSocket);
-    addClient("Hub", clientSocket);
+    lock_mutex();
+    removeClientFromChannel(name, clientSocket);
+    addClientToChannel("Hub", clientSocket);
+    unlock_mutex();
     return true;
 }
 
@@ -444,9 +517,11 @@ bool leaveChannel(int clientSocket, char *response, size_t responseSize)
  */
 bool createAndJoinChannel(char *name, int maxSize, int clientSocket, char *response, size_t responseSize)
 {
+    lock_mutex();
     if (name == NULL || strlen(name) == 0)
     {
         snprintf(response, responseSize, "Channel name cannot be empty");
+        unlock_mutex();
         return false;
     }
 
@@ -456,6 +531,7 @@ bool createAndJoinChannel(char *name, int maxSize, int clientSocket, char *respo
         if (strcmp(existingChannel->name, name) == 0)
         {
             snprintf(response, responseSize, "Channel with this name already exists");
+            unlock_mutex();
             return false;
         }
         existingChannel = existingChannel->next;
@@ -464,18 +540,25 @@ bool createAndJoinChannel(char *name, int maxSize, int clientSocket, char *respo
     if (maxSize < -1)
     {
         snprintf(response, responseSize, "Invalid max size for channel");
+        unlock_mutex();
         return false;
     }
 
+    unlock_mutex(); // Unlock before creating channel to avoid potential deadlocks
     Channel *newChannel = createChannel(name, maxSize, clientSocket);
 
+    lock_mutex();
     char *currentChannel = getClientChannelName(clientSocket);
+    unlock_mutex();
+
     if (currentChannel != NULL && strcmp(currentChannel, name) != 0)
     {
         sendFormattedChannelMessage(currentChannel, "Client%d has created a new channel named %s (%d/%d)",
                                     clientSocket, name, 1, maxSize);
 
-        removeClient(currentChannel, clientSocket);
+        lock_mutex();
+        removeClientFromChannel(currentChannel, clientSocket);
+        unlock_mutex();
     }
 
     int currentSize = getChannelSize(name);
@@ -493,9 +576,11 @@ bool createAndJoinChannel(char *name, int maxSize, int clientSocket, char *respo
  */
 bool joinChannel(char *name, int clientSocket, char *response, size_t responseSize)
 {
+    lock_mutex();
     if (name == NULL || strlen(name) == 0)
     {
         snprintf(response, responseSize, "Channel name cannot be empty");
+        unlock_mutex();
         return false;
     }
 
@@ -503,33 +588,37 @@ bool joinChannel(char *name, int clientSocket, char *response, size_t responseSi
     if (channel == NULL)
     {
         snprintf(response, responseSize, "Channel %s does not exist", name);
+        unlock_mutex();
         return false;
     }
 
     if (isChannelFull(name))
     {
         snprintf(response, responseSize, "This channel is full, you cannot join it");
+        unlock_mutex();
         return false;
     }
 
-    if (strcmp(getClientChannel(clientSocket)->name, name) == 0)
+    Channel *clientChannel = getClientChannel(clientSocket);
+    if (strcmp(clientChannel->name, name) == 0)
     {
         snprintf(response, responseSize, "You are already in this channel");
+        unlock_mutex();
         return false;
     }
 
     Channel *currentChannel = getClientChannel(clientSocket);
     if (currentChannel != NULL)
     {
-        removeClient(currentChannel->name, clientSocket);
+        removeClientFromChannel(currentChannel->name, clientSocket);
     }
 
-    addClient(name, clientSocket);
+    addClientToChannel(name, clientSocket);
+    unlock_mutex();
 
     int currentSize = getChannelSize(name);
     snprintf(response, responseSize, "You have joined %s (%d/%d)", name, currentSize, channel->maxSize);
 
-    // Utiliser les buffers pré-formatés
     sendFormattedChannelMessage(name, "Client%d has joined the channel %s (%d/%d)",
                                 clientSocket, name, currentSize, channel->maxSize);
 
@@ -547,10 +636,12 @@ bool joinChannel(char *name, int clientSocket, char *response, size_t responseSi
  */
 void sendToAllChannelMembers(int clientSocket, const char *message)
 {
+    lock_mutex();
     Channel *channel = getClientChannel(clientSocket);
     if (channel == NULL)
     {
         fprintf(stderr, "Client is not in any channel\n");
+        unlock_mutex();
         return;
     }
 
@@ -560,6 +651,7 @@ void sendToAllChannelMembers(int clientSocket, const char *message)
         send(current->val, message, strlen(message) + 1, 0);
         current = current->next;
     }
+    unlock_mutex();
 }
 
 /**
@@ -570,10 +662,12 @@ void sendToAllChannelMembers(int clientSocket, const char *message)
  */
 void sendToAllNamedChannelMembersExcept(char *name, const char *message, int clientSocket)
 {
+    lock_mutex();
     Channel *channel = getChannel(name);
     if (channel == NULL)
     {
         fprintf(stderr, "Channel %s does not exist\n", name);
+        unlock_mutex();
         return;
     }
 
@@ -586,6 +680,7 @@ void sendToAllNamedChannelMembersExcept(char *name, const char *message, int cli
         }
         current = current->next;
     }
+    unlock_mutex();
 }
 
 /**
@@ -595,10 +690,12 @@ void sendToAllNamedChannelMembersExcept(char *name, const char *message, int cli
  */
 void sendToAllNamedChannelMembers(char *name, const char *message)
 {
+    lock_mutex();
     Channel *channel = getChannel(name);
     if (channel == NULL)
     {
         fprintf(stderr, "Channel %s does not exist\n", name);
+        unlock_mutex();
         return;
     }
 
@@ -608,6 +705,7 @@ void sendToAllNamedChannelMembers(char *name, const char *message)
         send(current->val, message, strlen(message) + 1, 0);
         current = current->next;
     }
+    unlock_mutex();
 }
 
 /**
@@ -616,6 +714,7 @@ void sendToAllNamedChannelMembers(char *name, const char *message)
  */
 void sendInfoToAll(char *message)
 {
+    lock_mutex();
     Channel *channel = channelList.first;
     while (channel != NULL)
     {
@@ -627,6 +726,7 @@ void sendInfoToAll(char *message)
         }
         channel = channel->next;
     }
+    unlock_mutex();
 }
 
 /**
@@ -636,6 +736,7 @@ void sendInfoToAll(char *message)
  */
 void sendInfoToAllExcept(int clientSocket, char *message)
 {
+    lock_mutex();
     Channel *channel = channelList.first;
     while (channel != NULL)
     {
@@ -650,4 +751,5 @@ void sendInfoToAllExcept(int clientSocket, char *message)
         }
         channel = channel->next;
     }
+    unlock_mutex();
 }
