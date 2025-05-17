@@ -2,12 +2,18 @@ CC = gcc
 CFLAGS = -Wall -Wextra -g
 LDFLAGS = -pthread
 
-# Object files
-SERVER_OBJS = server.o ChainedList.o user.o command.o file.o cJSON.o
-CLIENT_OBJS = client.o
+# Source files and targets
+SRC_DIR = .
+CLIENT_SRC = $(SRC_DIR)/client.c
+SERVER_SRC = $(SRC_DIR)/server.c
+CHAINED_LIST_SRC = $(SRC_DIR)/ChainedList.c
+FILE_SRC = $(SRC_DIR)/file.c
 
-# Targets
-all: server client
+CLIENT = client
+SERVER = server
+
+CHAINED_LIST_OBJ = ChainedList.o
+FILE_OBJ = file.o
 
 # Server build
 server: $(SERVER_OBJS)
@@ -20,6 +26,15 @@ client: $(CLIENT_OBJS)
 # Object files compilation
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
+
+$(FILE_OBJ): $(FILE_SRC)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(CLIENT): $(CLIENT_SRC) $(CHAINED_LIST_OBJ) $(FILE_OBJ)
+	$(CC) $(CFLAGS) -o $@ $(CLIENT_SRC) $(CHAINED_LIST_OBJ) $(FILE_OBJ) $(LDFLAGS)
+
+$(SERVER): $(SERVER_SRC) $(CHAINED_LIST_OBJ) $(FILE_OBJ)
+	$(CC) $(CFLAGS) -o $@ $(SERVER_SRC) $(CHAINED_LIST_OBJ) $(FILE_OBJ) $(LDFLAGS)
 
 clean:
 	rm -f *.o server client
