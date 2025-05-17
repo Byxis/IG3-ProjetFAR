@@ -2,35 +2,49 @@ CC = gcc
 CFLAGS = -Wall -Wextra -g
 LDFLAGS = -pthread
 
-# Source files and targets
-SRC_DIR = .
-CLIENT_SRC = $(SRC_DIR)/client.c
-SERVER_SRC = $(SRC_DIR)/server.c
-CHAINED_LIST_SRC = $(SRC_DIR)/ChainedList.c
+# Fichiers sources communs
+COMMON_SRCS = ChainedList.c
 
-CLIENT = client
+# Fichiers sources spécifiques au serveur
+SERVER_SRCS = server.c user.c command.c cJSON.c
+
+# Fichiers sources spécifiques au client
+CLIENT_SRCS = client.c
+
+# Génération des noms des fichiers objets
+COMMON_OBJS = $(COMMON_SRCS:.c=.o)
+SERVER_OBJS = $(SERVER_SRCS:.c=.o)
+CLIENT_OBJS = $(CLIENT_SRCS:.c=.o)
+
+# Exécutables
 SERVER = server
-CHAINED_LIST_OBJ = ChainedList.o
+CLIENT = client
 
-all: $(CLIENT) $(SERVER)
+# Règle par défaut
+all: $(SERVER) $(CLIENT)
 
-$(CHAINED_LIST_OBJ): $(CHAINED_LIST_SRC)
+# Compilation du serveur
+$(SERVER): $(COMMON_OBJS) $(SERVER_OBJS)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+# Compilation du client
+$(CLIENT): $(COMMON_OBJS) $(CLIENT_OBJS)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+# Règle de compilation des fichiers objets
+%.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(CLIENT): $(CLIENT_SRC) $(CHAINED_LIST_OBJ)
-	$(CC) $(CFLAGS) -o $@ $(CLIENT_SRC) $(CHAINED_LIST_OBJ) $(LDFLAGS)
-
-$(SERVER): $(SERVER_SRC) $(CHAINED_LIST_OBJ)
-	$(CC) $(CFLAGS) -o $@ $(SERVER_SRC) $(CHAINED_LIST_OBJ) $(LDFLAGS)
-
+# Règle pour nettoyer le projet
 clean:
-	rm -f $(CLIENT) $(SERVER) *.o
+	rm -f *.o $(SERVER) $(CLIENT) *~ core
 
-# For individual compilation if needed
-client.o: $(CLIENT_SRC)
-	$(CC) $(CFLAGS) -c $< -o $@
-
-server.o: $(SERVER_SRC)
-	$(CC) $(CFLAGS) -c $< -o $@
+# Dépendances
+server.o: server.c ChainedList.h command.h user.h cJSON.h
+client.o: client.c
+user.o: user.c ChainedList.h command.h user.h cJSON.h
+command.o: command.c command.h ChainedList.h user.h
+ChainedList.o: ChainedList.c ChainedList.h
+cJSON.o: cJSON.c cJSON.h
 
 .PHONY: all clean
