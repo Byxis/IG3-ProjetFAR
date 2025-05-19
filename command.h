@@ -29,6 +29,6 @@ typedef enum command
 Command parseCommand(const char *msg);
 
 // Fonction pour exécuter une commande
-void executeCommand(int sock, char *msg);
+void executeCommand(int sock, char *msg, int *shouldShutdown);
 
 #endif
