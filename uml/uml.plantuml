@@ -1,20 +1,43 @@
 @startuml
 
+
+struct Node {
+ + val : Int
+ + next : Node*
+}
+struct ChainedList
+{
+ + size : Int
+ + first : Node*
+ + curr : Node*
+ - createList(int val) : List*
+ - isListEmpty(List *c) : Int
+ - addFirst(List *c, Int val)
+ - displayList(List *c)
+ - removeFisrt(List *c)
+ - addLast(List *c, Int val)
+ - removeLast(List *c)
+ - removeElement(List *c, Int val)
+}
+
 struct user
 {
-  + name : String
-  + role : RoleEnum
-}
-
-struct message
-{
-  + from : User
-  + type : MessageType
-  + content : String ? file
-}
-
-struct file
-{
+ + name : String
+ + password : String
+ + role : RoleEnum
+ + next : struct user*
+ + ad : struct sockaddr_in
+ + socket_fd : Int
+ + authenticated : Boolean
+ + registered_users : User*
+ + users_mutex : pthread_mutex_t
+ - findUserByame(const char *name) : User*
+ - findUserBySocket(int sock) : User*
+ - getRoleByName(const char *name) : RoleEnum
+ - stringRole(const char *roleStr) : RoleEnum
+ - loadUsersFromJson(const char *filename)
+ - saveUsersToJson(const char *filename)
+ - registerUser(const char *username, const char *password, int socketFd, struct sockaddr_in addr)
 }
 
 
@@ -22,41 +45,69 @@ class client
 {
  --
  + main()
- - initialiseConnection()
- - sendMessage(message)
- - receiveMessage(message) 
+ - receiveMessage(void *socketPtr)
+ - uploadFile(Int socketFd,const char *filename) 
+ - createDirectory(const char *dir)
+ - downloadFile(Int socketFd, const char *filename)
 }
 
 class server
 {
  - TCP
  - multi-threading
+ - client_sockets : List*
+ - clients_mutex : pthread_mutex_t
+ - shouldShitdown : int*
  --
  + main()
- - initialiseConnection()
- - receiveMessage()
- - sendMessage(to, message)
- - sendAllMessage(message)
+ + sendAllClients(const char* message)
+ + send_clients(int socket_fd, const char *message)
+ + remove_client(int socket_fd)
+ + add_client(int socket_fd)
+ + handle_client(void *arg) : void*
+ + sendFileContent(int clint, const char *filename)
+ + upload(int socketFd, const char *filename)
+ + download(int socketFd, const char *input)
+ + create_directory(const char *dir)
+ + handle_login(int client_socket)
 }
 
 enum RoleEnum
 {
-  USER
-  MODERATOR
-  ADMINISTRATOR
+ USER
+ MODERATOR
+ ADMINISTRATOR
 }
 
-enum MessageType
+enum CommandEnum
 {
-  GENERAL_CHAT
-  PRIVATE_MESSAGE
-  SYSTEM_INFO
+ COMMAND
+ PING
+ MSG
+ CONNECT
+ HELP
+ CREDITS 
+ SHUTDOWN
+ UPLOAD
+ DOWNLOAD
+ JOIN 
+ CREATE 
+ LEAVE
 }
 
-message -- MessageType
-message -- user
-message -- file
+struct command {
+ - privateMessage(int senderSock, const char *username, const char *msg)
+ + parseCommand(const char *msg)
+ + executeCommand(int sock, char* msg, int *shouldShutDown)
+}
 
+Node -- ChainedList
+command -- ChainedList
+command -- CommandEnum
+server -- command
+server -- user
+user -- ChainedList
+user -- command
 user -- RoleEnum
 
 @enduml
