@@ -4,44 +4,58 @@
 #include "ChainedList.h"
 #include <stdbool.h>
 #include <stddef.h>
+#include <pthread.h>
 
-typedef struct Channel Channel;
-
-struct Channel
+typedef struct Channel
 {
-    char *name;    // name of the channel
-    int maxSize;   // -1 for unlimited size
-    List *clients; // list of clients in the channel
-    Channel *next; // pointer to the next channel in the list
-};
+    char *name;
+    int maxSize;
+    List *clients;
+    struct Channel *next;
+} Channel;
 
-typedef struct ChannelList
+typedef struct
 {
-    Channel *first; // first channel in the list
+    Channel *first;
+    pthread_mutex_t mutex;
 } ChannelList;
+
+// Global channel list
+extern ChannelList channelList;
 
 // System initialization and cleanup
 void initChannelSystem();
 void cleanupChannelSystem();
 
-// Public API for channel operations
-bool createAndJoinChannel(char *name, int maxSize, int clientSocket, char *response, size_t responseSize);
-bool joinChannel(char *name, int clientSocket, char *response, size_t responseSize);
-bool leaveChannel(int clientSocket, char *response, size_t responseSize);
+// User channel operations
+char *getUserChannelName(User *user);
+Channel *getUserChannel(User *user);
+void addUserToChannel(char *name, User *user);
+void removeUserFromChannel(char *name, User *user);
 
-// Client-related functions used by server
-char *getClientChannelName(int clientSocket);
-Channel *getClientChannel(int clientSocket);
-void addClientToChannel(char *name, int clientSocket);
-void removeClientFromChannel(char *name, int clientSocket);
+// Channel management
+bool userLeaveChannel(User *user, char *response, size_t responseSize);
+bool userCreateAndJoinChannel(char *name, int maxSize, User *user, char *response, size_t responseSize);
+bool userJoinChannel(char *name, User *user, char *response, size_t responseSize);
 
-// Message sending functions
-void sendChannelMessage(int clientSocket, const char *message);
-void sendToAllChannelMembers(int clientSocket, const char *message);
+// Message sending
+void sendUserChannelMessage(User *user, const char *message);
+void sendToAllUserChannelMembers(User *user, const char *message);
+void sendToAllNamedChannelMembersExceptUser(char *name, const char *message, User *user);
 void sendToAllNamedChannelMembers(char *name, const char *message);
-void sendToAllNamedChannelMembersExcept(char *name, const char *message, int clientSocket);
 void sendInfoToAll(char *message);
-void sendInfoToAllExcept(int clientSocket, char *message);
+void sendInfoToAllExceptUser(User *user, char *message);
+
+// Helper functions
+bool registerUserInHub(User *user);
+void disconnectUserFromAllChannels(User *user);
+User *findUserBySocketId(int socketId);
+bool getUsersInChannel(char *channelName, char *result, size_t size);
+bool listAllChannels(char *result, size_t size);
+
+// Mutex helpers
+void lockChannelList();
+void unlockChannelList();
 
 #endif // CHANNEL_H
 

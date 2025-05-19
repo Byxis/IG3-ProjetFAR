@@ -16,7 +16,16 @@ CHANNEL_OBJ = Channel.o
 
 all: $(CLIENT) $(SERVER)
 
-$(CHAINED_LIST_OBJ): $(CHAINED_LIST_SRC)
+# Compilation du serveur
+$(SERVER): $(COMMON_OBJS) $(SERVER_OBJS) Channel.o
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+# Compilation du client
+$(CLIENT): $(COMMON_OBJS) $(CLIENT_OBJS)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+# Règle de compilation des fichiers objets
+%.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(CHANNEL_OBJ): $(CHANNEL_SRC)
@@ -31,9 +40,14 @@ $(SERVER): $(SERVER_SRC) $(CHAINED_LIST_OBJ) $(CHANNEL_OBJ)
 clean:
 	rm -f $(CLIENT) $(SERVER) *.o
 
-# For individual compilation if needed
-client.o: $(CLIENT_SRC)
-	$(CC) $(CFLAGS) -c $< -o $@
+# Dépendances
+server.o: server.c ChainedList.h command.h user.h cJSON.h
+client.o: client.c
+user.o: user.c ChainedList.h command.h user.h cJSON.h
+command.o: command.c command.h ChainedList.h user.h
+ChainedList.o: ChainedList.c ChainedList.h
+cJSON.o: cJSON.c cJSON.h
+Channel.o: Channel.c Channel.h
 
 server.o: $(SERVER_SRC)
 	$(CC) $(CFLAGS) -c $< -o $@
