@@ -16,6 +16,7 @@
 List *client_sockets;
 pthread_mutex_t clients_mutex = PTHREAD_MUTEX_INITIALIZER;
 extern pthread_mutex_t users_mutex;
+int *shouldShutdown;
 
 void sendAllClients(const char *message);
 void send_client(int socket_fd, const char *message);
@@ -105,7 +106,7 @@ void *handle_client(void *arg)
     handle_login(socket_fd);
     char buffer[MAX_MESSAGE_SIZE];
 
-    while (1)
+    while (!*shouldShutdown)
     {
         int received = recv(socket_fd, buffer, sizeof(buffer) - 1, 0);
         if (received <= 0)
@@ -114,7 +115,7 @@ void *handle_client(void *arg)
         }
         buffer[received] = '\0';
         printf("Client %d: %s\n", socket_fd, buffer);
-        executeCommand(socket_fd, buffer);
+        executeCommand(socket_fd, buffer, shouldShutdown);
     }
     printf("Client %d déconnecté\n", socket_fd);
     remove_client(socket_fd);
@@ -384,45 +385,76 @@ int main()
     client_sockets->first = NULL;
     client_sockets->curr = NULL;
     client_sockets->size = 0;
-
     printf("Serveur démarré sur le port 31473\n");
 
-    while (1)
+    shouldShutdown = malloc(sizeof(int));
+    if (shouldShutdown == NULL)
     {
-        struct sockaddr_in client_addr;
-        socklen_t addrlen = sizeof(client_addr);
-        int new_socket = accept(server_socket, (struct sockaddr *)&client_addr, &addrlen);
-
-        if (new_socket < 0)
-        {
-            perror("accept");
-            continue;
-        }
-
-        printf("Nouveau client connecté (socket: %d)\n", new_socket);
-        add_client(new_socket);
-
-        int *arg = malloc(sizeof(int));
-
-        if (arg == NULL)
-        {
-            perror("malloc");
-            remove_client(new_socket);
-            continue;
-        }
-
-        *arg = new_socket;
-        pthread_t thread_id;
-
-        if (pthread_create(&thread_id, NULL, handle_client, arg) != 0)
-        {
-            perror("pthread_create");
-            free(arg);
-            remove_client(new_socket);
-            continue;
-        }
-        pthread_detach(thread_id);
+        perror("malloc shouldShutdown");
+        free(client_sockets);
+        exit(1);
     }
+    *shouldShutdown = 0;
+
+    while (!*shouldShutdown)
+    {
+        fd_set readfds;
+        struct timeval timeout;
+        FD_ZERO(&readfds);
+        FD_SET(server_socket, &readfds);
+        timeout.tv_sec = 1; // Verify every second
+        timeout.tv_usec = 0;
+
+        int activity = select(server_socket + 1, &readfds, NULL, NULL, &timeout);
+
+        if (activity < 0)
+        {
+            perror("select");
+            continue;
+        }
+
+        if (activity == 0)
+            continue;
+
+        if (FD_ISSET(server_socket, &readfds))
+        {
+            struct sockaddr_in client_addr;
+            socklen_t addrlen = sizeof(client_addr);
+            int new_socket = accept(server_socket, (struct sockaddr *)&client_addr, &addrlen);
+
+            if (new_socket < 0)
+            {
+                perror("accept");
+                continue;
+            }
+
+            printf("Nouveau client connecté (socket: %d)\n", new_socket);
+            add_client(new_socket);
+
+            int *arg = malloc(sizeof(int));
+
+            if (arg == NULL)
+            {
+                perror("malloc");
+                remove_client(new_socket);
+                continue;
+            }
+
+            *arg = new_socket;
+            pthread_t thread_id;
+
+            if (pthread_create(&thread_id, NULL, handle_client, arg) != 0)
+            {
+                perror("pthread_create");
+                free(arg);
+                remove_client(new_socket);
+                continue;
+            }
+            pthread_detach(thread_id);
+        }
+    }
+    pthread_mutex_lock(&clients_mutex);
+    pthread_mutex_unlock(&clients_mutex);
     free(client_sockets);
     close(server_socket);
     pthread_mutex_destroy(&clients_mutex);

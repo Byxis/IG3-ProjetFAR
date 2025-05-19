@@ -73,9 +73,10 @@ void privateMessage(int senderSock, const char *username, const char *msg)
  * Parses the command, dispatches to the appropriate handler, and sends responses in French.
  * @param sock (int) - The client socket file descriptor.
  * @param msg (char*) - The received command string.
+ * @param shouldShutdown (int*) - Pointer to the shouldShutdown flag.
  * @returns void
  */
-void executeCommand(int sock, char *msg)
+void executeCommand(int sock, char *msg, int *shouldShutdown)
 {
     char response[1024];
     Command cmd = parseCommand(msg);
@@ -146,6 +147,7 @@ void executeCommand(int sock, char *msg)
         if (user != NULL && getRoleByName(user->name) == ADMIN)
         {
             send(sock, "Arrêt du serveur...", 21, 0);
+            *shouldShutdown = 1;
         }
         else
         {
