@@ -11,8 +11,8 @@
 #include "user.h"
 #include "cJSON.h"
 
-// Initialize the global user list
-UserList *global_users = NULL;
+// Declare the global user list as external
+extern UserList *global_users;
 
 /**
  ** Create a new UserList structure with mutex initialized

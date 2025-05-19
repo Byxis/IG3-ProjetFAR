@@ -13,11 +13,11 @@
 
 #define MAX_MESSAGE_SIZE 2000
 
-int *shouldShutdown;
+int shouldShutdown = 0; // Initialize the variable properly
 List *client_sockets;
 
 // Change from definitions to extern declarations
-extern UserList *global_users;
+UserList *global_users = NULL;
 extern ChannelList channelList;
 
 // Function prototypes
@@ -42,6 +42,14 @@ User *findUserByName(const char *username)
 
 void add_client(User *user)
 {
+    // Vérifier si l'utilisateur existe avant de l'ajouter
+    if (user == NULL)
+    {
+        fprintf(stderr, "Error: Trying to add NULL user to client list\n");
+        return;
+    }
+
+    // Vérifier si client_sockets est NULL
     if (client_sockets == NULL)
     {
         client_sockets = createList(user);
@@ -52,7 +60,7 @@ void add_client(User *user)
     addLast(client_sockets, user);
 }
 
-void removeClient(int socket_fd)
+void remove_client(int socket_fd)
 {
     if (client_sockets == NULL)
         return;
@@ -103,20 +111,21 @@ void removeClient(int socket_fd)
     unlockList(client_sockets);
 }
 
-void *handleClient(void *arg)
+void *handle_client(void *arg)
 {
     int sock = *((int *)arg);
     free(arg);
 
     User *user = NULL;
-    handle_login(socket_fd);
+    handle_login(sock);
 
     // Find the user with this socket_fd
     lockList(client_sockets);
     Node *current = client_sockets->first;
     while (current != NULL)
     {
-        if (current->user != NULL && current->user->socket_fd == socket_fd)
+        // Vérifier d'abord si current et current->user ne sont pas NULL
+        if (current != NULL && current->user != NULL && current->user->socket_fd == sock)
         {
             user = current->user;
             break;
@@ -127,24 +136,21 @@ void *handleClient(void *arg)
 
     if (user == NULL)
     {
-        printf("Error: Could not find user for socket %d\n", socket_fd);
-        close(socket_fd);
+        printf("Error: Could not find user for socket %d\n", sock);
+        close(sock);
         return NULL;
     }
-    printf("Client %s (%d) connecté\n", user->name, socket_fd);
+    printf("Client %s (%d) connecté\n", user->name, sock);
 
     if (!registerUserInHub(user))
     {
         printf("Error: Could not register user in Hub channel\n");
-        close(socket_fd);
+        close(sock);
         return NULL;
     }
-    printf("Client %s (%d) enregistré dans le Hub\n", user->name, socket_fd);
+    printf("Client %s (%d) enregistré dans le Hub\n", user->name, sock);
 
     char buffer[MAX_MESSAGE_SIZE];
-
-    char buffer[MAX_MESSAGE_SIZE];
-    char broadcast[MAX_MESSAGE_SIZE + 20];
 
     while (1)
     {
@@ -155,13 +161,14 @@ void *handleClient(void *arg)
         }
 
         buffer[received] = '\0';
-        executeCommand(user, buffer, shouldShutdown);
+        executeCommand(user, buffer, &shouldShutdown);
     }
 
-    printf("Client %s (%d) déconnecté\n", user->name, socket_fd);
-    remove_client(socket_fd);
+    printf("Client %s (%d) déconnecté\n", user->name, sock);
+    remove_client(sock);
     return NULL;
 }
+
 void sendFileContent(int client, const char *filename)
 {
     FILE *file = fopen(filename, "r");
@@ -230,12 +237,13 @@ void upload(int socketFd, const char *filename)
             break;
         }
         total += len;
-        printf("Reçu %d octets (total: %d)\n", len, total);
+        printf("\rRéception: %d/%d octets (%.1f%%)", total, total, 100.0);
+        fflush(stdout);
         fwrite(buffer, 1, len, fp);
         fflush(fp);
     }
     fclose(fp);
-    printf("Fichier reçu et sauvegardé: %s (%d octets)\n", filepath, total);
+    printf("\nFichier '%s' (%d octets) reçu et sauvegardé dans 'uploads/'.\n", filename, total);
     send(socketFd, "Fichier reçu avec succès\n", 26, 0);
 }
 
@@ -309,14 +317,17 @@ void download(int socketFd, const char *input)
 
         fclose(f);
         send(socketFd, "__END__", 7, 0);
+        usleep(50000);
 
         if (sent == file_size)
         {
             sprintf(response, "Fichier '%s' (%ld octets) envoyé avec succès.\n", filename, file_size);
+            printf("\nFichier '%s' (%ld octets) envoyé avec succès.\n", filename, file_size);
         }
         else
         {
             sprintf(response, "Erreur: Transfert incomplet. Envoyé %ld/%ld octets.\n", sent, file_size);
+            printf("\nErreur: Transfert incomplet. Envoyé %ld/%ld octets.\n", sent, file_size);
         }
         send(socketFd, response, strlen(response), 0);
     }
@@ -326,6 +337,7 @@ void download(int socketFd, const char *input)
         send(socketFd, response, strlen(response), 0);
     }
 }
+
 void handle_login(int client_socket)
 {
     char buffer[200];
@@ -360,10 +372,18 @@ void handle_login(int client_socket)
     if (!user)
     {
         User *newUser = createUser(client_socket, username, password, USER, &addr, true);
+
+        // Vérifier si la création de l'utilisateur a réussi
+        if (newUser == NULL)
+        {
+            fprintf(stderr, "Error: Failed to create new user\n");
+            send(client_socket, "Erreur serveur: impossible de créer l'utilisateur.\n", 52, 0);
+            close(client_socket);
+            return;
+        }
+
         add_client(newUser);
-
         addUserToList(global_users, newUser);
-
         send(client_socket, "Compte créé et connecté avec succès.\n", 39, 0);
         saveUsersToJson("users.json");
     }
@@ -372,9 +392,7 @@ void handle_login(int client_socket)
         user->authenticated = true;
         user->socket_fd = client_socket;
         user->ad = addr;
-
         add_client(user);
-
         send(client_socket, "Connexion réussie.\n", 20, 0);
     }
     else
@@ -406,7 +424,7 @@ int main()
     }
 
     int opt = 1;
-    if (setsockopt(dSock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) // allow reuse of the address
+    if (setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
     {
         perror("setsockopt");
         exit(1);
@@ -417,14 +435,14 @@ int main()
     ad.sin_addr.s_addr = INADDR_ANY;
     ad.sin_port = htons((short)31473);
 
-    int res = bind(dSock, (struct sockaddr *)&ad, sizeof(ad)); // bind the socket to the address
+    int res = bind(server_socket, (struct sockaddr *)&ad, sizeof(ad));
     if (res == -1)
     {
         perror("bind");
         exit(1);
     }
 
-    res = listen(dSock, 5); // listen on the socket
+    res = listen(server_socket, 5);
     if (res == -1)
     {
         perror("listen");
@@ -441,28 +459,23 @@ int main()
 
     printf("Serveur démarré sur le port 31473\n");
 
-    while (1)
+    while (!shouldShutdown) // Check the shutdown flag in the main loop
     {
         struct sockaddr_in clientaddr;
         socklen_t addrlen = sizeof(clientaddr);
 
-        int new_socket = accept(dSock, (struct sockaddr *)&clientaddr, &addrlen);
+        // Use select with a timeout to periodically check shouldShutdown flag
+        fd_set readfds;
+        FD_ZERO(&readfds);
+        FD_SET(server_socket, &readfds);
 
-        if (new_socket < 0)
+        struct timeval timeout;
+        timeout.tv_sec = 1; // Check the flag every second
+        timeout.tv_usec = 0;
+
+        if (select(server_socket + 1, &readfds, NULL, NULL, &timeout) > 0)
         {
-            perror("accept");
-            continue;
-        }
-
-        printf("Nouveau client connecté (socket: %d)\n", new_socket);
-        addClient(new_socket);
-
-        int *arg = malloc(sizeof(int));
-        if (arg == NULL)
-        {
-            struct sockaddr_in client_addr;
-            socklen_t addrlen = sizeof(client_addr);
-            int new_socket = accept(server_socket, (struct sockaddr *)&client_addr, &addrlen);
+            int new_socket = accept(server_socket, (struct sockaddr *)&clientaddr, &addrlen);
 
             if (new_socket < 0)
             {
@@ -473,7 +486,6 @@ int main()
             printf("Nouveau client connecté (socket: %d)\n", new_socket);
 
             int *arg = malloc(sizeof(int));
-
             if (arg == NULL)
             {
                 perror("malloc");
@@ -488,27 +500,40 @@ int main()
             {
                 perror("pthread_create");
                 free(arg);
-                close(new_socket);
+                remove_client(new_socket);
                 continue;
             }
             pthread_detach(thread_id);
         }
-        *arg = new_socket;
-
-        pthread_t thread_id;
-        if (pthread_create(&thread_id, NULL, handleClient, arg) != 0)
-        {
-            perror("pthread_create");
-            free(arg);
-            removeClient(new_socket);
-            continue;
-        }
-        pthread_detach(thread_id);
     }
-    free(client_sockets);
+
+    printf("Server is shutting down...\n");
+
+    sendAllClients("Server is shutting down. Goodbye!");
+
+    sleep(1);
+
+    if (client_sockets != NULL)
+    {
+        lockList(client_sockets);
+        Node *current = client_sockets->first;
+        while (current != NULL)
+        {
+            if (current->user != NULL)
+            {
+                close(current->user->socket_fd);
+            }
+            current = current->next;
+        }
+        unlockList(client_sockets);
+
+        free(client_sockets);
+    }
+
     close(server_socket);
     destroyUserList(global_users);
-    pthread_mutex_destroy(&channelList.mutex);
     cleanupChannelSystem();
+
+    printf("Server shutdown complete\n");
     return 0;
 }

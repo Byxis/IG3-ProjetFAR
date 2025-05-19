@@ -77,8 +77,12 @@ void uploadFile(int socketFd, const char *filename)
         return;
     }
 
-    char command[256];
+    // Obtenir la taille du fichier
+    fseek(file, 0, SEEK_END);
+    long filesize = ftell(file);
+    fseek(file, 0, SEEK_SET);
 
+    char command[256];
     snprintf(command, sizeof(command), "@upload %s", filename);
     send(socketFd, command, strlen(command), 0);
     usleep(100000);
@@ -87,20 +91,29 @@ void uploadFile(int socketFd, const char *filename)
     size_t bytes;
     size_t total = 0;
 
-    printf("Envoi du fichier %s...\n", filename);
+    printf("Envoi de '%s' (%ld octets) vers le serveur...\n", filename, filesize);
 
     while ((bytes = fread(buffer, 1, sizeof(buffer), file)) > 0)
     {
         send(socketFd, buffer, bytes, 0);
         total += bytes;
-        printf("\rProgression: %zu octets envoyés", total);
+        printf("\rEnvoi: %zu/%ld octets (%.1f%%)", total, filesize, (float)total / filesize * 100);
         fflush(stdout);
         usleep(10000);
     }
-    printf("\n");
+
     usleep(100000);
     send(socketFd, "__END__", 7, 0);
-    printf("Fichier envoyé avec succès!\n");
+
+    if (total == filesize)
+    {
+        printf("\nFichier '%s' (%ld octets) envoyé avec succès.\n", filename, filesize);
+    }
+    else
+    {
+        printf("\nEnvoi incomplet : %zu/%ld octets.\n", total, filesize);
+    }
+
     fclose(file);
 }
 
@@ -218,7 +231,6 @@ void downloadFile(int socketFd, const char *filename)
     fclose(file);
     inDownload = 0;
 
-    int confirmationShown = 0;
     char endMarker[16] = {0};
     int endLen = recv(socketFd, endMarker, sizeof(endMarker) - 1, 0);
 
@@ -229,8 +241,7 @@ void downloadFile(int socketFd, const char *filename)
         if (confirmLen > 0)
         {
             confirmMsg[confirmLen] = '\0';
-            printf("\n Fichier '%s' téléchargé avec succès dans 'downloads/'.\n", serverFilename);
-            confirmationShown = 1;
+            printf("\nFichier '%s' (%ld octets) téléchargé avec succès dans 'downloads/'.\n", serverFilename, filesize);
         }
     }
     else if (endLen > 0)

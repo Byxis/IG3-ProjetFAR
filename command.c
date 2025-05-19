@@ -177,7 +177,15 @@ void executeCommand(User *user, const char *message, int *shouldShutdown)
         if (user->role == ADMIN)
         {
             send(sock, "Arrêt du serveur...", 21, 0);
-            *shouldShutdown = 1;
+            if (shouldShutdown != NULL)
+            {
+                *shouldShutdown = 1;
+                printf("Shutdown initiated by admin user: %s\n", user->name);
+            }
+            else
+            {
+                printf("Warning: shouldShutdown pointer is NULL\n");
+            }
         }
         else
         {
