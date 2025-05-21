@@ -3,12 +3,16 @@
 #include <string.h>
 #include <stdlib.h>
 #include "user.h"
+#include "Channel.h"
 #include <stdio.h>
 
-void sendFileContent(int client, const char *filename);
-void upload(int socketFd, const char *filename);
-void download(int socketFd, const char *input);
-void sendAllClients(const char *message);
+#define MAX_MESSAGE_SIZE 2000
+
+extern User *findUserByName(const char *username);
+extern void sendFileContent(int client, const char *filename);
+extern void upload(int socketFd, const char *filename);
+extern void download(int socketFd, const char *input);
+extern void sendAllClients(const char *message);
 
 /**
  ** Parses a command string and returns the corresponding Command enum.
@@ -41,6 +45,8 @@ Command parseCommand(const char *msg)
         return UPLOAD;
     if (strncasecmp(msg, "@download", 9) == 0)
         return DOWNLOAD;
+    if (strncasecmp(msg, "@delete", 7) == 0)
+        return DELETE_CHANNEL;
     return UNKNOWN;
 }
 
@@ -69,17 +75,41 @@ void privateMessage(int senderSock, const char *username, const char *msg)
 }
 
 /**
- ** Executes a command received from a client socket.
- * Parses the command, dispatches to the appropriate handler, and sends responses in French.
- * @param sock (int) - The client socket file descriptor.
- * @param msg (char*) - The received command string.
+ ** Finds a user by their socket file descriptor.
+ * @param sock (int) - The socket file descriptor.
+ * @returns User* - The user object or NULL if not found.
+ */
+User *findUserBySocket(int sock)
+{
+    return findUserBySocketId(sock); // Use the helper function from Channel.c
+}
+
+/**
+ ** Gets the role of a user by their name.
+ * @param name (const char*) - The user's name.
+ * @returns Role - The role of the user.
+ */
+Role getRoleByName(const char *name)
+{
+    User *user = findUserByName(name);
+    return user ? user->role : USER;
+}
+
+/**
+ ** Executes a command received from a user.
+ * @param user (User*) - The user who sent the command.
+ * @param message (const char*) - The received command string.
  * @param shouldShutdown (int*) - Pointer to the shouldShutdown flag.
  * @returns void
  */
-void executeCommand(int sock, char *msg, int *shouldShutdown)
+void executeCommand(User *user, const char *message, int *shouldShutdown)
 {
+    int sock = user->socket_fd;
     char response[1024];
-    Command cmd = parseCommand(msg);
+    Command cmd = parseCommand(message);
+    char msg[MAX_MESSAGE_SIZE]; // Create a modifiable copy
+    strncpy(msg, message, MAX_MESSAGE_SIZE - 1);
+    msg[MAX_MESSAGE_SIZE - 1] = '\0';
 
     switch (cmd)
     {
@@ -91,7 +121,10 @@ void executeCommand(int sock, char *msg, int *shouldShutdown)
                  "@msg <user> <msg> - Message privé\n"
                  "@connect <user> <pwd> - Connexion\n"
                  "@credits - Affiche les crédits\n"
-                 "@shutdown - Éteint le serveur\n");
+                 "@shutdown - Éteint le serveur\n"
+                 "@create <channel_name> [max_size] - Crée un canal\n"
+                 "@join <channel_name> - Rejoindre un canal\n"
+                 "@leave - Quitter le canal\n");
         send(sock, response, strlen(response), 0);
         break;
     case PING:
@@ -99,10 +132,10 @@ void executeCommand(int sock, char *msg, int *shouldShutdown)
         break;
     case MSG:
     {
-        char user[MAX_USERNAME_LENGTH];
+        char username[MAX_USERNAME_LENGTH];
         char message[1024];
-        sscanf(msg, "@msg %s %[^\n]", user, message);
-        privateMessage(sock, user, message);
+        sscanf(msg, "@msg %s %[^\n]", username, message);
+        privateMessage(sock, username, message);
         break;
     }
     case CONNECT:
@@ -143,11 +176,18 @@ void executeCommand(int sock, char *msg, int *shouldShutdown)
         break;
     case SHUTDOWN:
     {
-        User *user = findUserBySocket(sock);
-        if (user != NULL && getRoleByName(user->name) == ADMIN)
+        if (user->role == ADMIN)
         {
             send(sock, "Arrêt du serveur...", 21, 0);
-            *shouldShutdown = 1;
+            if (shouldShutdown != NULL)
+            {
+                *shouldShutdown = 1;
+                printf("Shutdown initiated by admin user: %s\n", user->name);
+            }
+            else
+            {
+                printf("Warning: shouldShutdown pointer is NULL\n");
+            }
         }
         else
         {
@@ -178,11 +218,101 @@ void executeCommand(int sock, char *msg, int *shouldShutdown)
     case DOWNLOAD:
         download(sock, msg);
         break;
+    case CREATE:
+    {
+        char channelName[100];
+        int maxSize = -1; // Default to unlimited
+        if (sscanf(msg + 8, "%99s %d", channelName, &maxSize) >= 1)
+        {
+            char response[256];
+            userCreateAndJoinChannel(channelName, maxSize, user, response, sizeof(response));
+            send(sock, response, strlen(response), 0);
+        }
+        else
+        {
+            send(sock, "Usage: @create <channel_name> [max_size]", 40, 0);
+        }
+        break;
+    }
+    case JOIN:
+    {
+        char channelName[100];
+        if (sscanf(msg + 6, "%99s", channelName) == 1)
+        {
+            char response[256];
+            userJoinChannel(channelName, user, response, sizeof(response));
+            send(sock, response, strlen(response), 0);
+        }
+        else
+        {
+            send(sock, "Usage: @join <channel_name>", 28, 0);
+        }
+        break;
+    }
+    case LEAVE:
+    {
+        char response[256];
+        userLeaveChannel(user, response, sizeof(response));
+        send(sock, response, strlen(response), 0);
+        break;
+    }
+    case DELETE_CHANNEL:
+    {
+        if (user->role != ADMIN)
+        {
+            send(sock, "Permission refusée. Seul un administrateur peut supprimer un salon.", 65, 0);
+            break;
+        }
+        
+        char channelName[100];
+        if (sscanf(msg + 8, "%99s", channelName) == 1)
+        {
+            // Vérifier que ce n'est pas le salon Hub
+            if (strcmp(channelName, "Hub") == 0)
+            {
+                send(sock, "Impossible de supprimer le salon Hub.", 37, 0);
+                break;
+            }
+            
+            // Vérifier si le salon existe
+            Channel *channel = getUserChannel(user);
+            if (channel == NULL || strcmp(channel->name, channelName) != 0)
+            {
+                // Notifier tous les utilisateurs du salon avant suppression
+                char broadcast[512];
+                snprintf(broadcast, sizeof(broadcast), "L'administrateur %s a supprimé le salon '%s'", 
+                         user->name, channelName);
+                sendToAllNamedChannelMembers(channelName, broadcast);
+                
+                // Supprimer le salon
+                removeChannel(channelName);
+                
+                char response[256];
+                snprintf(response, sizeof(response), "Le salon '%s' a été supprimé.", channelName);
+                send(sock, response, strlen(response), 0);
+            }
+            else
+            {
+                send(sock, "Vous ne pouvez pas supprimer votre salon actuel. Utilisez @leave d'abord.", 70, 0);
+            }
+        }
+        else
+        {
+            send(sock, "Usage: @delete <channel_name>", 30, 0);
+        }
+        break;
+    }
     default:
     {
-        char broadcastMsg[1024];
-        snprintf(broadcastMsg, sizeof(broadcastMsg), "Message de %d : %s", sock, msg);
-        sendAllClients(broadcastMsg);
+        char broadcastMsg[MAX_MESSAGE_SIZE * 2];
+        char *channelName = getUserChannelName(user);
+        if (channelName == NULL)
+        {
+            channelName = "Hub";
+        }
+        printf("%s-%s: %s\n", channelName, user->name, msg);
+        snprintf(broadcastMsg, sizeof(broadcastMsg), "%s-%s: %s", channelName, user->name, msg);
+        sendUserChannelMessage(user, broadcastMsg);
         break;
     }
     }

@@ -3,9 +3,11 @@
 
 #include <netinet/in.h>
 #include <stdbool.h>
+#include "ChainedList.h" // Now safe to include this
 
 extern List *client_sockets;
-extern pthread_mutex_t clients_mutex;
+// Remove global mutex declaration
+// extern pthread_mutex_t clients_mutex;
 
 typedef enum
 {
@@ -24,16 +26,26 @@ typedef struct user
     struct user *next;
 } User;
 
-void sendAllClients(const char *message);
-void sendClient(int socket_fd, const char *message);
-void removeClient(int socket_fd);
-void addClient(int sock);
+// Add user list structure with mutex
+typedef struct
+{
+    User *head;
+    pthread_mutex_t mutex;
+} UserList;
+
+// Declare global users list
+extern UserList *global_users;
+
 void *handleClient(void *arg);
-User *findUserByName(const char *name);
-Role getRoleByName(const char *name);
 void registerUser(const char *pseudo, const char *password, int socket_fd, struct sockaddr_in ad);
-void saveUsersToJson(const char *filename);
-void loadUsersFromJson(const char *filename);
-User *findUserBySocket(int sock);
+void saveUsersToFile(const char *filename);
+void loadUsersFromFile(const char *filename);
+User *createUser(int socketId, const char *name, const char *password, Role role, struct sockaddr_in *addr, bool authenticated);
+
+// Add new functions for thread-safe user operations
+UserList *createUserList();
+void destroyUserList(UserList *list);
+void addUserToList(UserList *list, User *user);
+User *findUserByNameSafe(UserList *list, const char *username);
 
 #endif

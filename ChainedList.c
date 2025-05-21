@@ -2,33 +2,78 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include "user.h"
 
-List *createList(int val)
+/**
+ ** Creates a new list with an optional initial user
+ * @param user (User*) - The user to add to the list (can be NULL)
+ * @returns List* - Pointer to the new list
+ */
+List *createList(User *user)
 {
     List *chain = (List *)malloc(sizeof(List));
     if (!chain)
         return NULL;
 
-    chain->size = 1;
-    chain->first = (Node *)malloc(sizeof(Node));
-    if (!chain->first)
-    {
-        free(chain);
-        return NULL;
-    }
+    chain->size = user ? 1 : 0;
+    pthread_mutex_init(&chain->mutex, NULL);
 
-    chain->first->val = val;
-    chain->first->next = NULL;
-    chain->curr = chain->first;
+    if (user)
+    {
+        chain->first = (Node *)malloc(sizeof(Node));
+        if (!chain->first)
+        {
+            free(chain);
+            return NULL;
+        }
+        chain->first->user = user;
+        chain->first->next = NULL;
+        chain->curr = chain->first;
+    }
+    else
+    {
+        chain->first = NULL;
+        chain->curr = NULL;
+    }
 
     return chain;
 }
 
+/**
+ ** Locks the list mutex for thread-safe operations
+ * @param c (List*) - The list to lock
+ * @returns void
+ */
+void lockList(List *c)
+{
+    if (c)
+        pthread_mutex_lock(&c->mutex);
+}
+
+/**
+ ** Unlocks the list mutex after thread-safe operations
+ * @param c (List*) - The list to unlock
+ * @returns void
+ */
+void unlockList(List *c)
+{
+    if (c)
+        pthread_mutex_unlock(&c->mutex);
+}
+
+/**
+ ** Displays the contents of the list
+ * @param c (List*) - The list to display
+ * @returns void
+ */
 void displayList(List *c)
 {
+    lockList(c);
+
     if (isListEmpty(c))
     {
         printf("[]\n");
+        unlockList(c);
         return;
     }
 
@@ -38,41 +83,68 @@ void displayList(List *c)
     {
         if (nextNode->next == NULL)
         {
-            printf(" %d ]\n", nextNode->val);
+            printf(" %s ]\n", nextNode->user->name);
         }
         else
         {
-            printf(" %d,", nextNode->val);
+            printf(" %s,", nextNode->user->name);
         }
         nextNode = nextNode->next;
     }
+
+    unlockList(c);
 }
 
+/**
+ ** Checks if a list is empty
+ * @param c (List*) - The list to check
+ * @returns int - 1 if empty, 0 otherwise
+ */
 int isListEmpty(List *c)
 {
     return c == NULL || c->first == NULL;
 }
 
-void addFirst(List *c, int val)
+/**
+ ** Adds a user to the beginning of the list
+ * @param c (List*) - The list to modify
+ * @param user (User*) - The user to add
+ * @returns void
+ */
+void addFirst(List *c, User *user)
 {
     if (c == NULL)
         return;
 
+    lockList(c);
+
     Node *newNode = (Node *)malloc(sizeof(Node));
     if (newNode == NULL)
+    {
+        unlockList(c);
         return;
+    }
 
-    newNode->val = val;
+    newNode->user = user;
     newNode->next = c->first;
 
     c->first = newNode;
     c->size++;
+
+    unlockList(c);
 }
 
+/**
+ ** Removes the first element from the list
+ * @param c (List*) - The list to modify
+ * @returns void
+ */
 void removeFirst(List *c)
 {
     if (isListEmpty(c))
         return;
+
+    lockList(c);
 
     Node *temp = c->first;
     c->first = c->first->next;
@@ -84,23 +156,40 @@ void removeFirst(List *c)
 
     free(temp);
     c->size--;
+
+    unlockList(c);
 }
 
-void addLast(List *c, int val)
+/**
+ ** Adds a user to the end of the list
+ * @param c (List*) - The list to modify
+ * @param user (User*) - The user to add
+ * @returns void
+ */
+void addLast(List *c, User *user)
 {
     if (c == NULL)
         return;
+
+    if (user == NULL)
+        return;
+
+    lockList(c);
 
     if (isListEmpty(c))
     {
         c->first = (Node *)malloc(sizeof(Node));
         if (!c->first)
+        {
+            unlockList(c);
             return;
+        }
 
-        c->first->val = val;
+        c->first->user = user;
         c->first->next = NULL;
         c->curr = c->first;
         c->size = 1;
+        unlockList(c);
         return;
     }
 
@@ -112,18 +201,30 @@ void addLast(List *c, int val)
 
     Node *newNode = (Node *)malloc(sizeof(Node));
     if (newNode == NULL)
+    {
+        unlockList(c);
         return;
+    }
 
-    newNode->val = val;
+    newNode->user = user;
     newNode->next = NULL;
     lastNode->next = newNode;
     c->size++;
+
+    unlockList(c);
 }
 
+/**
+ ** Removes the last element from the list
+ * @param c (List*) - The list to modify
+ * @returns void
+ */
 void removeLast(List *c)
 {
     if (isListEmpty(c))
         return;
+
+    lockList(c);
 
     if (c->first->next == NULL)
     {
@@ -131,6 +232,7 @@ void removeLast(List *c)
         c->first = NULL;
         c->curr = NULL;
         c->size = 0;
+        unlockList(c);
         return;
     }
 
@@ -148,23 +250,71 @@ void removeLast(List *c)
     free(prevToLast->next);
     prevToLast->next = NULL;
     c->size--;
+
+    unlockList(c);
 }
 
-void removeElement(List *c, int val)
+/**
+ ** Finds a node containing a specific user in a thread-safe manner
+ * @param c (List*) - The list to search
+ * @param user (User*) - The user to find
+ * @returns Node* - The node containing the user or NULL if not found
+ */
+Node *findUserNodeSafe(List *c, User *user)
+{
+    if (c == NULL || user == NULL)
+        return NULL;
+
+    lockList(c);
+
+    Node *current = c->first;
+    while (current != NULL)
+    {
+        if (current->user == user)
+        {
+            unlockList(c);
+            return current;
+        }
+        current = current->next;
+    }
+
+    unlockList(c);
+    return NULL;
+}
+
+/**
+ ** Removes a specific user from the list
+ * @param c (List*) - The list to modify
+ * @param user (User*) - The user to remove
+ * @returns void
+ */
+void removeElement(List *c, User *user)
 {
     if (isListEmpty(c))
         return;
 
-    if (c->first->val == val)
+    lockList(c);
+
+    if (c->first->user == user)
     {
-        removeFirst(c);
+        Node *to_remove = c->first;
+        c->first = c->first->next;
+
+        if (c->curr == to_remove)
+        {
+            c->curr = c->first;
+        }
+
+        free(to_remove);
+        c->size--;
+        unlockList(c);
         return;
     }
 
     Node *current = c->first;
     while (current->next != NULL)
     {
-        if (current->next->val == val)
+        if (current->next->user == user)
         {
             Node *to_remove = current->next;
 
@@ -176,8 +326,38 @@ void removeElement(List *c, int val)
             current->next = to_remove->next;
             free(to_remove);
             c->size--;
+            unlockList(c);
             return;
         }
         current = current->next;
     }
+
+    unlockList(c);
+}
+
+/**
+ ** Deletes the list and frees all memory
+ * @param c (List*) - The list to delete
+ * @returns void
+ */
+void deleteList(List *c)
+{
+    if (c == NULL)
+        return;
+
+    lockList(c);
+
+    Node *current = c->first;
+    while (current != NULL)
+    {
+        Node *temp = current;
+        current = current->next;
+        free(temp);
+    }
+
+    unlockList(c);
+
+    pthread_mutex_destroy(&c->mutex);
+
+    free(c);
 }
