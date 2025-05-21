@@ -124,8 +124,7 @@ void executeCommand(User *user, const char *message, int *shouldShutdown)
                  "@shutdown - Éteint le serveur\n"
                  "@create <channel_name> [max_size] - Crée un canal\n"
                  "@join <channel_name> - Rejoindre un canal\n"
-                 "@leave - Quitter le canal\n"
-                 "delete <channel_name> - Supprimer un cannal\n");
+                 "@leave - Quitter le canal\n");
         send(sock, response, strlen(response), 0);
         break;
     case PING:

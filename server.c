@@ -107,6 +107,7 @@ void remove_client(int socket_fd)
         prev = current;
         current = current->next;
     }
+
     unlockList(client_sockets);
 }
 
@@ -121,7 +122,6 @@ void *handle_client(void *arg)
     // Find the user with this socket_fd
     lockList(client_sockets);
     Node *current = client_sockets->first;
-
     while (current != NULL)
     {
         // Vérifier d'abord si current et current->user ne sont pas NULL
@@ -132,7 +132,6 @@ void *handle_client(void *arg)
         }
         current = current->next;
     }
-  
     unlockList(client_sockets);
 
     if (user == NULL)
@@ -150,15 +149,17 @@ void *handle_client(void *arg)
         return NULL;
     }
     printf("Client %s (%d) enregistré dans le Hub\n", user->name, sock);
+
     char buffer[MAX_MESSAGE_SIZE];
 
-    while (!*shouldShutdown)
+    while (1)
     {
-        int received = recv(socket_fd, buffer, sizeof(buffer) - 1, 0);
+        int received = recv(sock, buffer, sizeof(buffer) - 1, 0);
         if (received <= 0)
         {
             break;
         }
+
         buffer[received] = '\0';
         executeCommand(user, buffer, &shouldShutdown);
     }
@@ -422,6 +423,7 @@ int main()
         perror("socket");
         exit(1);
     }
+
     int opt = 1;
     if (setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
     {
@@ -429,13 +431,12 @@ int main()
         exit(1);
     }
 
-    struct sockaddr_in addr;
-    addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = INADDR_ANY;
-    addr.sin_port = htons((short)31473);
+    struct sockaddr_in ad;
+    ad.sin_family = AF_INET;
+    ad.sin_addr.s_addr = INADDR_ANY;
+    ad.sin_port = htons((short)31473);
 
-    int res = bind(server_socket, (struct sockaddr *)&addr, sizeof(addr));
-
+    int res = bind(server_socket, (struct sockaddr *)&ad, sizeof(ad));
     if (res == -1)
     {
         perror("bind");
@@ -443,7 +444,6 @@ int main()
     }
 
     res = listen(server_socket, 5);
-
     if (res == -1)
     {
         perror("listen");
@@ -462,20 +462,8 @@ int main()
 
     while (!shouldShutdown) // Check the shutdown flag in the main loop
     {
-        perror("malloc shouldShutdown");
-        free(client_sockets);
-        exit(1);
-    }
-    *shouldShutdown = 0;
-
-    while (!*shouldShutdown)
-    {
-        fd_set readfds;
-        struct timeval timeout;
-        FD_ZERO(&readfds);
-        FD_SET(server_socket, &readfds);
-        timeout.tv_sec = 1; // Verify every second
-        timeout.tv_usec = 0;
+        struct sockaddr_in clientaddr;
+        socklen_t addrlen = sizeof(clientaddr);
 
         // Use select with a timeout to periodically check shouldShutdown flag
         fd_set readfds;
