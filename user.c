@@ -9,7 +9,7 @@
 #include "ChainedList.h"
 #include "command.h"
 #include "user.h"
-#include "cJSON.h"
+#include "file.h"
 
 // Declare the global user list as external
 extern UserList *global_users;
@@ -169,91 +169,80 @@ User *createUser(int socketId, const char *name, const char *password,
 }
 
 /**
- ** Loads users from a JSON file into memory.
- * @param filename (const char*) - The path to the JSON file.
+ ** Loads users from a text file into memory.
+ * @param filename (const char*) - The path to the text file.
  * @returns void
  */
-void loadUsersFromJson(const char *filename)
+void loadUsersFromFile(const char *filename)
 {
-    FILE *file = fopen(filename, "r");
-    if (!file)
+    FileHandler fileHandler = open_file(filename, "r");
+    if (fileHandler.fp == NULL)
     {
-        perror("Erreur ouverture JSON");
+        perror("Erreur ouverture fichier utilisateurs");
         return;
     }
-    struct stat st;
-    stat(filename, &st);
-    char *data = malloc(st.st_size + 1);
 
-    fread(data, 1, st.st_size, file);
-    data[st.st_size] = '\0';
-    fclose(file);
-
-    cJSON *json = cJSON_Parse(data);
-
-    if (!json)
+    char buffer[256];
+    while (read_file(&fileHandler, buffer, sizeof(buffer)))
     {
-        fprintf(stderr, "Erreur parsing JSON\n");
-        free(data);
-        return;
+        char username[50];
+        char password[50];
+        char roleStr[10];
+        
+        if (sscanf(buffer, "%s %s %s", username, password, roleStr) == 3)
+        {
+            User *new_user = malloc(sizeof(User));
+            if (new_user == NULL)
+            {
+                perror("Erreur allocation utilisateur");
+                continue;
+            }
+
+            strcpy(new_user->name, username);
+            strcpy(new_user->password, password);
+            new_user->role = stringToRole(roleStr);
+            new_user->authenticated = false;
+            new_user->socket_fd = -1;
+
+            // Use the thread-safe function to add to the list
+            addUserToList(global_users, new_user);
+        }
     }
-    int count = cJSON_GetArraySize(json);
-    for (int i = 0; i < count; i++)
-    {
-        cJSON *item = cJSON_GetArrayItem(json, i);
-        const char *username = cJSON_GetObjectItem(item, "username")->valuestring;
-        const char *password = cJSON_GetObjectItem(item, "password")->valuestring;
-        const char *role = cJSON_GetObjectItem(item, "role")->valuestring;
-        User *new_user = malloc(sizeof(User));
 
-        strcpy(new_user->name, username);
-        strcpy(new_user->password, password);
-
-        new_user->role = stringToRole(role);
-        new_user->authenticated = false;
-        new_user->socket_fd = -1;
-
-        // Use the thread-safe function to add to the list
-        addUserToList(global_users, new_user);
-    }
-    cJSON_Delete(json);
-    free(data);
+    close_file(&fileHandler);
 }
 
 /**
- ** Saves all users in memory to a JSON file.
- * @param filename (const char*) - The path to the JSON file.
+ ** Saves all users in memory to a text file.
+ * @param filename (const char*) - The path to the text file.
  * @returns void
  */
-void saveUsersToJson(const char *filename)
+void saveUsersToFile(const char *filename)
 {
-    pthread_mutex_lock(&global_users->mutex);
-    cJSON *json = cJSON_CreateArray();
-    User *current = global_users->head;
+    FileHandler fileHandler = open_file(filename, "w");
+    if (fileHandler.fp == NULL)
+    {
+        perror("Erreur ouverture fichier utilisateurs pour écriture");
+        return;
+    }
 
+    pthread_mutex_lock(&global_users->mutex);
+    
+    User *current = global_users->head;
     while (current != NULL)
     {
-        cJSON *user_obj = cJSON_CreateObject();
-
-        cJSON_AddStringToObject(user_obj, "username", current->name);
-        cJSON_AddStringToObject(user_obj, "password", current->password);
-        cJSON_AddStringToObject(user_obj, "role", current->role == ADMIN ? "ADMIN" : "USER");
-        cJSON_AddItemToArray(json, user_obj);
-
+        char buffer[256];
+        snprintf(buffer, sizeof(buffer), "%s %s %s", 
+                 current->name, 
+                 current->password, 
+                 current->role == ADMIN ? "ADMIN" : "USER");
+        
+        write_file(&fileHandler, buffer);
         current = current->next;
     }
 
-    char *data = cJSON_Print(json);
-    FILE *file = fopen(filename, "w");
-
-    if (file)
-    {
-        fputs(data, file);
-        fclose(file);
-    }
-    free(data);
-    cJSON_Delete(json);
     pthread_mutex_unlock(&global_users->mutex);
+    close_file(&fileHandler);
 }
 
 /**
@@ -288,6 +277,6 @@ void registerUser(const char *username, const char *password, int socketFd, stru
     // Use the thread-safe function to add to the list
     addUserToList(global_users, new_user);
 
-    saveUsersToJson("users.json");
+    saveUsersToFile("save_users.txt");
     send(socketFd, "Utilisateur enregistré avec succès.\n", 39, 0);
 }

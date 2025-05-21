@@ -1,5 +1,5 @@
 #include "Channel.h"
-#include "user.h" // Add this include to get the full User definition
+#include "user.h" 
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -7,6 +7,7 @@
 #include <sys/socket.h>
 #include <stdarg.h>
 #include <pthread.h>
+#include "file.h"
 
 #define MESSAGE_BUFFER_SIZE 256
 #define MESSAGE_BUFFER_COUNT 10
@@ -30,7 +31,7 @@ void unlockChannelList()
 
 static Channel *getChannel(char *name);
 void removeChannel(char *name);
-static Channel *createChannel(char *name, int maxSize, User *user);
+Channel *createChannel(char *name, int maxSize, User *user);
 
 /**
  ** Get a buffer for formatted messages.
@@ -144,31 +145,31 @@ void cleanupChannelSystem()
  * @param {User *} user - The user creating the channel.
  * @return {Channel *} newChannel - A pointer to the newly created channel, or NULL on failure.
  */
-static Channel *createChannel(char *name, int maxSize, User *user)
+Channel *createChannel(char *name, int maxSize, User *user)
 {
     if (name == NULL || strlen(name) == 0)
     {
-        fprintf(stderr, "Channel name cannot be empty\n");
+        fprintf(stderr, "Le nom du canal ne peut pas être vide\n");
         return NULL;
     }
 
     Channel *existingChannel = getChannel(name);
     if (existingChannel != NULL)
     {
-        fprintf(stderr, "Channel already exists\n");
+        fprintf(stderr, "Le canal existe déjà\n");
         return NULL;
     }
 
     if (maxSize < -1)
     {
-        fprintf(stderr, "Invalid max size for channel\n");
+        fprintf(stderr, "Taille maximale invalide pour le canal\n");
         return NULL;
     }
     lockChannelList();
     Channel *newChannel = (Channel *)malloc(sizeof(Channel));
     if (newChannel == NULL)
     {
-        perror("Failed to allocate memory for new channel");
+        perror("Échec d'allocation mémoire pour le nouveau canal");
         unlockChannelList();
         return NULL;
     }
@@ -177,7 +178,15 @@ static Channel *createChannel(char *name, int maxSize, User *user)
     newChannel->clients = createList(user);
     newChannel->next = channelList.first->next;
     channelList.first->next = newChannel;
+
+    if (user != NULL)
+    {
+        addLast(newChannel->clients, user);
+    }
+
     unlockChannelList();
+    save_channels("save_channels.txt");
+
     return newChannel;
 }
 
@@ -213,7 +222,7 @@ static bool isChannelFull(char *name)
     Channel *channel = getChannel(name);
     if (channel == NULL)
     {
-        fprintf(stderr, "Channel not found\n");
+        fprintf(stderr, "Canal non trouvé\n");
         return false;
     }
     if (channel->maxSize == -1)
@@ -236,7 +245,7 @@ static int getChannelSize(char *name)
     lockChannelList();
     if (channel == NULL)
     {
-        fprintf(stderr, "Channel not found\n");
+        fprintf(stderr, "Canal non trouvé\n");
         unlockChannelList();
         return -1;
     }
@@ -264,17 +273,17 @@ static bool __attribute__((unused)) isChannelEmpty(char *name)
     lockChannelList();
     if (channel == NULL)
     {
-        fprintf(stderr, "Channel not found\n");
+        fprintf(stderr, "Canal non trouvé\n");
         unlockChannelList();
         return false;
     }
     if (isListEmpty(channel->clients))
     {
-        fprintf(stderr, "Channel is empty\n");
+        fprintf(stderr, "Le canal est vide\n");
         unlockChannelList();
         return true;
     }
-    fprintf(stderr, "Channel is not empty\n");
+    fprintf(stderr, "Le canal n'est pas vide\n");
     unlockChannelList();
     return false;
 }
@@ -338,12 +347,12 @@ void addUserToChannel(char *name, User *user)
     Channel *channel = getChannel(name);
     if (channel == NULL)
     {
-        fprintf(stderr, "Channel not found\n");
+        fprintf(stderr, "Canal non trouvé\n");
         exit(EXIT_FAILURE);
     }
     if (isChannelFull(name))
     {
-        fprintf(stderr, "Channel is full, cannot add user\n");
+        fprintf(stderr, "Le canal est plein, impossible d'ajouter l'utilisateur\n");
         return;
     }
     addLast(channel->clients, user);
@@ -380,13 +389,13 @@ void removeChannel(char *name)
 {
     if (name == NULL || strlen(name) == 0)
     {
-        fprintf(stderr, "Channel name cannot be empty\n");
+        fprintf(stderr, "Le nom du canal ne peut pas être vide\n");
         return;
     }
 
     if (strcmp(channelList.first->name, name) == 0)
     {
-        fprintf(stderr, "Cannot remove the hub channel\n");
+        fprintf(stderr, "Impossible de supprimer le canal Hub\n");
         return;
     }
     lockChannelList();
@@ -409,6 +418,7 @@ void removeChannel(char *name)
             free(current->name);
             free(current);
             unlockChannelList();
+            save_channels("save_channels.txt");
             return;
         }
         previous = current;
@@ -427,7 +437,7 @@ void sendUserChannelMessage(User *user, const char *message)
     Channel *channel = getUserChannel(user);
     if (channel == NULL)
     {
-        fprintf(stderr, "User is not in any channel\n");
+        fprintf(stderr, "L'utilisateur n'est dans aucun canal\n");
         return;
     }
     lockChannelList();
@@ -455,21 +465,21 @@ bool userLeaveChannel(User *user, char *response, size_t responseSize)
     Channel *userChannel = getUserChannel(user);
     if (userChannel == NULL)
     {
-        snprintf(response, responseSize, "You are not in any channel");
+        snprintf(response, responseSize, "Vous n'êtes dans aucun canal");
         return false;
     }
 
     char *name = userChannel->name;
     if (strcmp(name, "Hub") == 0)
     {
-        snprintf(response, responseSize, "You cannot leave the Hub channel");
+        snprintf(response, responseSize, "Vous ne pouvez pas quitter le canal Hub");
         return false;
     }
 
-    sendFormattedChannelMessage(name, "%s has left the channel %s (%d/%d)",
+    sendFormattedChannelMessage(name, "%s a quitté le canal %s (%d/%d)",
                                 user->name, name, getChannelSize(name) - 1, userChannel->maxSize);
 
-    sendFormattedChannelMessage("Hub", "%s has joined the channel %s (%d/%d)",
+    sendFormattedChannelMessage("Hub", "%s a rejoint le canal %s (%d/%d)",
                                 user->name, "Hub", getChannelSize("Hub"), -1);
 
     removeUserFromChannel(name, user);
@@ -490,7 +500,7 @@ bool userCreateAndJoinChannel(char *name, int maxSize, User *user, char *respons
 {
     if (name == NULL || strlen(name) == 0)
     {
-        snprintf(response, responseSize, "Channel name cannot be empty");
+        snprintf(response, responseSize, "Le nom du canal ne peut pas être vide");
         return false;
     }
 
@@ -498,34 +508,34 @@ bool userCreateAndJoinChannel(char *name, int maxSize, User *user, char *respons
 
     if (currentChannel != NULL && strcmp(currentChannel, name) != 0)
     {
-        sendFormattedChannelMessage(currentChannel, "%s has created a new channel named %s (%d/%d)",
+        sendFormattedChannelMessage(currentChannel, "%s a créé un nouveau canal nommé %s (%d/%d)",
                                     user->name, name, 1, maxSize);
 
         removeUserFromChannel(currentChannel, user);
     }
-    printf("Creating channel:::  %s\n", name);
+    printf("Création du canal:::  %s\n", name);
 
     Channel *newChannel = createChannel(name, maxSize, user);
 
-    printf("Channel created:::  %s\n", name);
+    printf("Canal créé:::  %s\n", name);
     fflush(stdout);
 
     // Affichage de la liste des canaux
     Channel *current = channelList.first;
     while (current != NULL)
     {
-        printf("Channel: %s, Size: %d\n", current->name, current->clients->size);
+        printf("Canal: %s, Taille: %d\n", current->name, current->clients->size);
         current = current->next;
     }
 
     if (newChannel == NULL)
     {
-        snprintf(response, responseSize, "Failed to create channel %s", name);
+        snprintf(response, responseSize, "Échec de la création du canal %s", name);
         return false;
     }
 
     int currentSize = getChannelSize(name);
-    snprintf(response, responseSize, "You have created and joined %s (%d/%d)", name, currentSize, maxSize);
+    snprintf(response, responseSize, "Vous avez créé et rejoint %s (%d/%d)", name, currentSize, maxSize);
     return true;
 }
 
@@ -541,27 +551,27 @@ bool userJoinChannel(char *name, User *user, char *response, size_t responseSize
 {
     if (name == NULL || strlen(name) == 0)
     {
-        snprintf(response, responseSize, "Channel name cannot be empty");
+        snprintf(response, responseSize, "Le nom du canal ne peut pas être vide");
         return false;
     }
 
     Channel *channel = getChannel(name);
     if (channel == NULL)
     {
-        snprintf(response, responseSize, "Channel %s does not exist", name);
+        snprintf(response, responseSize, "Le canal %s n'existe pas", name);
         return false;
     }
 
     if (isChannelFull(name))
     {
-        snprintf(response, responseSize, "This channel is full, you cannot join it");
+        snprintf(response, responseSize, "Ce canal est plein, vous ne pouvez pas le rejoindre");
         return false;
     }
 
     Channel *userChannel = getUserChannel(user);
     if (strcmp(userChannel->name, name) == 0)
     {
-        snprintf(response, responseSize, "You are already in this channel");
+        snprintf(response, responseSize, "Vous êtes déjà dans ce canal");
         return false;
     }
 
@@ -574,12 +584,12 @@ bool userJoinChannel(char *name, User *user, char *response, size_t responseSize
     addUserToChannel(name, user);
 
     int currentSize = getChannelSize(name);
-    snprintf(response, responseSize, "You have joined %s (%d/%d)", name, currentSize, channel->maxSize);
+    snprintf(response, responseSize, "Vous avez rejoint %s (%d/%d)", name, currentSize, channel->maxSize);
 
-    sendFormattedChannelMessage(name, "%s has joined the channel %s (%d/%d)",
+    sendFormattedChannelMessage(name, "%s a rejoint le canal %s (%d/%d)",
                                 user->name, name, currentSize, channel->maxSize);
 
-    sendFormattedChannelMessage(currentChannel->name, "%s has left the channel %s (%d/%d)",
+    sendFormattedChannelMessage(currentChannel->name, "%s a quitté le canal %s (%d/%d)",
                                 user->name, currentChannel->name,
                                 getChannelSize(currentChannel->name), currentChannel->maxSize);
 
@@ -597,7 +607,7 @@ void sendToAllUserChannelMembers(User *user, const char *message)
     Channel *channel = getUserChannel(user);
     if (channel == NULL)
     {
-        fprintf(stderr, "User is not in any channel\n");
+        fprintf(stderr, "L'utilisateur n'est dans aucun canal\n");
         unlockChannelList();
         return;
     }
@@ -626,7 +636,7 @@ void sendToAllNamedChannelMembersExceptUser(char *name, const char *message, Use
     lockChannelList();
     if (channel == NULL)
     {
-        fprintf(stderr, "Channel %s does not exist\n");
+        fprintf(stderr, "Le canal %s n'existe pas\n", name);
         unlockChannelList();
         return;
     }
@@ -678,21 +688,16 @@ bool registerUserInHub(User *user)
     if (user == NULL)
         return false;
 
-    printf("Registering user %s in Hub channel\n", user->name);
-    printf("Registering after lock user %s in Hub channel\n", user->name);
+    printf("Enregistrement de l'utilisateur %s dans le canal Hub\n", user->name);
     Channel *hub = getChannel("Hub");
     if (hub == NULL)
     {
-        printf("Hub channel does not exist\n");
+        printf("Le canal Hub n'existe pas\n");
         return false;
     }
-    printf("Adding user %s to Hub channel\n", user->name);
 
     addLast(hub->clients, user);
-
-    printf("User %s added to Hub channel\n", user->name);
-
-    sendFormattedChannelMessage("Hub", "%s has joined the server", user->name);
+    sendFormattedChannelMessage("Hub", "%s a rejoint le serveur", user->name);
 
     return true;
 }
@@ -734,7 +739,7 @@ void disconnectUserFromAllChannels(User *user)
         char channelName[100];
         strcpy(channelName, userChannel->name);
         removeElement(userChannel->clients, user);
-        sendFormattedChannelMessage(channelName, "%s has disconnected from the server", user->name);
+        sendFormattedChannelMessage(channelName, "%s s'est déconnecté du serveur", user->name);
     }
     unlockChannelList();
 }
@@ -788,7 +793,7 @@ bool getUsersInChannel(char *channelName, char *result, size_t size)
     if (!channel)
     {
         unlockChannelList();
-        snprintf(result, size, "Channel %s does not exist", channelName);
+        snprintf(result, size, "Le canal %s n'existe pas", channelName);
         return false;
     }
 
@@ -798,14 +803,14 @@ bool getUsersInChannel(char *channelName, char *result, size_t size)
     char maxSizeStr[20];
     if (maxSize == -1)
     {
-        strcpy(maxSizeStr, "unlimited");
+        strcpy(maxSizeStr, "illimité");
     }
     else
     {
         snprintf(maxSizeStr, sizeof(maxSizeStr), "%d", maxSize);
     }
 
-    size_t written = (size_t)snprintf(result, size, "Channel '%s' (%d/%s users): ",
+    size_t written = (size_t)snprintf(result, size, "Canal '%s' (%d/%s utilisateurs): ",
                                       channelName, channel->clients->size, maxSizeStr);
 
     Node *node = channel->clients->first;
@@ -836,7 +841,7 @@ bool listAllChannels(char *result, size_t size)
         return false;
 
     lockChannelList();
-    size_t written = (size_t)snprintf(result, size, "Available channels:\n");
+    size_t written = (size_t)snprintf(result, size, "Canaux disponibles:\n");
 
     Channel *channel = channelList.first;
     while (channel != NULL && written < size)
@@ -844,7 +849,7 @@ bool listAllChannels(char *result, size_t size)
         char maxSizeStr[20];
         if (channel->maxSize == -1)
         {
-            strcpy(maxSizeStr, "unlimited");
+            strcpy(maxSizeStr, "illimité");
         }
         else
         {
@@ -852,7 +857,7 @@ bool listAllChannels(char *result, size_t size)
         }
 
         written += snprintf(result + written, size - written,
-                            "- %s (%d/%s users)\n",
+                            "- %s (%d/%s utilisateurs)\n",
                             channel->name, channel->clients->size, maxSizeStr);
 
         channel = channel->next;
@@ -869,7 +874,7 @@ bool listAllChannels(char *result, size_t size)
  */
 void sendToAllNamedChannelMembers(char *name, const char *message)
 {
-    printf("Sending message to all members of channel %s: %s\n", name, message);
+    printf("Envoi d'un message à tous les membres du canal %s: %s\n", name, message);
     Channel *channel = channelList.first;
     lockChannelList();
     while (channel != NULL)
@@ -879,7 +884,7 @@ void sendToAllNamedChannelMembers(char *name, const char *message)
             Node *current = channel->clients->first;
             while (current != NULL)
             {
-                printf("Sending message to user %s\n", current->user->name);
+                printf("Envoi du message à l'utilisateur %s\n", current->user->name);
                 if (current->user != NULL)
                 {
                     send(current->user->socket_fd, message, strlen(message) + 1, 0);
@@ -892,7 +897,7 @@ void sendToAllNamedChannelMembers(char *name, const char *message)
         channel = channel->next;
     }
     unlockChannelList();
-    fprintf(stderr, "Channel %s does not exist\n", name);
+    fprintf(stderr, "Le canal %s n'existe pas\n", name);
 }
 
 /**

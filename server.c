@@ -8,7 +8,7 @@
 #include "command.h"
 #include "user.h"
 #include "Channel.h"
-#include "cJSON.h"
+#include "file.h"
 #include <sys/stat.h>
 
 #define MAX_MESSAGE_SIZE 2000
@@ -136,7 +136,7 @@ void *handle_client(void *arg)
 
     if (user == NULL)
     {
-        printf("Error: Could not find user for socket %d\n", sock);
+        printf("Erreur: Impossible de trouver l'utilisateur pour le socket %d\n", sock);
         close(sock);
         return NULL;
     }
@@ -144,7 +144,7 @@ void *handle_client(void *arg)
 
     if (!registerUserInHub(user))
     {
-        printf("Error: Could not register user in Hub channel\n");
+        printf("Erreur: Impossible d'enregistrer l'utilisateur dans le Hub\n");
         close(sock);
         return NULL;
     }
@@ -385,7 +385,7 @@ void handle_login(int client_socket)
         add_client(newUser);
         addUserToList(global_users, newUser);
         send(client_socket, "Compte créé et connecté avec succès.\n", 39, 0);
-        saveUsersToJson("users.json");
+        saveUsersToFile("save_users.txt");
     }
     else if (strcmp(user->password, password) == 0)
     {
@@ -414,8 +414,9 @@ int main()
     // Initialize our new structures with mutexes
     global_users = createUserList();
 
-    loadUsersFromJson("users.json");
-    initChannelSystem(); // Initialize channel system
+    initChannelSystem();
+    loadUsersFromFile("save_users.txt");
+    load_channels("save_channels.txt");
 
     if (server_socket == -1)
     {
@@ -507,9 +508,9 @@ int main()
         }
     }
 
-    printf("Server is shutting down...\n");
+    printf("Le serveur s'arrête...\n");
 
-    sendAllClients("Server is shutting down. Goodbye!");
+    sendAllClients("Le serveur s'arrête. Au revoir!");
 
     sleep(1);
 
@@ -534,6 +535,6 @@ int main()
     destroyUserList(global_users);
     cleanupChannelSystem();
 
-    printf("Server shutdown complete\n");
+    printf("Arrêt du serveur terminé\n");
     return 0;
 }

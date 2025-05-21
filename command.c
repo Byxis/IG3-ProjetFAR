@@ -45,6 +45,8 @@ Command parseCommand(const char *msg)
         return UPLOAD;
     if (strncasecmp(msg, "@download", 9) == 0)
         return DOWNLOAD;
+    if (strncasecmp(msg, "@delete", 7) == 0)
+        return DELETE_CHANNEL;
     return UNKNOWN;
 }
 
@@ -254,15 +256,60 @@ void executeCommand(User *user, const char *message, int *shouldShutdown)
         send(sock, response, strlen(response), 0);
         break;
     }
+    case DELETE_CHANNEL:
+    {
+        if (user->role != ADMIN)
+        {
+            send(sock, "Permission refusée. Seul un administrateur peut supprimer un salon.", 65, 0);
+            break;
+        }
+        
+        char channelName[100];
+        if (sscanf(msg + 8, "%99s", channelName) == 1)
+        {
+            // Vérifier que ce n'est pas le salon Hub
+            if (strcmp(channelName, "Hub") == 0)
+            {
+                send(sock, "Impossible de supprimer le salon Hub.", 37, 0);
+                break;
+            }
+            
+            // Vérifier si le salon existe
+            Channel *channel = getUserChannel(user);
+            if (channel == NULL || strcmp(channel->name, channelName) != 0)
+            {
+                // Notifier tous les utilisateurs du salon avant suppression
+                char broadcast[512];
+                snprintf(broadcast, sizeof(broadcast), "L'administrateur %s a supprimé le salon '%s'", 
+                         user->name, channelName);
+                sendToAllNamedChannelMembers(channelName, broadcast);
+                
+                // Supprimer le salon
+                removeChannel(channelName);
+                
+                char response[256];
+                snprintf(response, sizeof(response), "Le salon '%s' a été supprimé.", channelName);
+                send(sock, response, strlen(response), 0);
+            }
+            else
+            {
+                send(sock, "Vous ne pouvez pas supprimer votre salon actuel. Utilisez @leave d'abord.", 70, 0);
+            }
+        }
+        else
+        {
+            send(sock, "Usage: @delete <channel_name>", 30, 0);
+        }
+        break;
+    }
     default:
     {
         char broadcastMsg[MAX_MESSAGE_SIZE * 2];
         char *channelName = getUserChannelName(user);
         if (channelName == NULL)
         {
-            channelName = "Hub"; // Default channel name
+            channelName = "Hub";
         }
-        printf("Channel Name: %s\n", channelName);
         printf("%s-%s: %s\n", channelName, user->name, msg);
         snprintf(broadcastMsg, sizeof(broadcastMsg), "%s-%s: %s", channelName, user->name, msg);
         sendUserChannelMessage(user, broadcastMsg);

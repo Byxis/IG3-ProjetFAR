@@ -3,7 +3,7 @@ CFLAGS = -Wall -Wextra -g
 LDFLAGS = -pthread
 
 # Files for server
-SERVER_OBJS = server.o user.o command.o ChainedList.o Channel.o cJSON.o
+SERVER_OBJS = server.o user.o command.o ChainedList.o Channel.o file.o
 
 # Files for client
 CLIENT_OBJS = client.o

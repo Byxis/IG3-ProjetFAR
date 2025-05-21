@@ -2,18 +2,20 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include "user.h" // Include this after ChainedList.h
+#include "user.h"
 
+/**
+ ** Creates a new list with an optional initial user
+ * @param user (User*) - The user to add to the list (can be NULL)
+ * @returns List* - Pointer to the new list
+ */
 List *createList(User *user)
 {
     List *chain = (List *)malloc(sizeof(List));
     if (!chain)
         return NULL;
 
-    // Set initial size based on whether user is NULL
     chain->size = user ? 1 : 0;
-
-    // Initialize the mutex
     pthread_mutex_init(&chain->mutex, NULL);
 
     if (user)
@@ -37,21 +39,33 @@ List *createList(User *user)
     return chain;
 }
 
-// Add mutex locking functions
+/**
+ ** Locks the list mutex for thread-safe operations
+ * @param c (List*) - The list to lock
+ * @returns void
+ */
 void lockList(List *c)
 {
     if (c)
         pthread_mutex_lock(&c->mutex);
 }
 
+/**
+ ** Unlocks the list mutex after thread-safe operations
+ * @param c (List*) - The list to unlock
+ * @returns void
+ */
 void unlockList(List *c)
 {
     if (c)
         pthread_mutex_unlock(&c->mutex);
 }
 
-// Update remaining functions to use the encapsulated mutex when needed
-
+/**
+ ** Displays the contents of the list
+ * @param c (List*) - The list to display
+ * @returns void
+ */
 void displayList(List *c)
 {
     lockList(c);
@@ -81,11 +95,22 @@ void displayList(List *c)
     unlockList(c);
 }
 
+/**
+ ** Checks if a list is empty
+ * @param c (List*) - The list to check
+ * @returns int - 1 if empty, 0 otherwise
+ */
 int isListEmpty(List *c)
 {
     return c == NULL || c->first == NULL;
 }
 
+/**
+ ** Adds a user to the beginning of the list
+ * @param c (List*) - The list to modify
+ * @param user (User*) - The user to add
+ * @returns void
+ */
 void addFirst(List *c, User *user)
 {
     if (c == NULL)
@@ -109,6 +134,11 @@ void addFirst(List *c, User *user)
     unlockList(c);
 }
 
+/**
+ ** Removes the first element from the list
+ * @param c (List*) - The list to modify
+ * @returns void
+ */
 void removeFirst(List *c)
 {
     if (isListEmpty(c))
@@ -130,6 +160,12 @@ void removeFirst(List *c)
     unlockList(c);
 }
 
+/**
+ ** Adds a user to the end of the list
+ * @param c (List*) - The list to modify
+ * @param user (User*) - The user to add
+ * @returns void
+ */
 void addLast(List *c, User *user)
 {
     if (c == NULL)
@@ -178,6 +214,11 @@ void addLast(List *c, User *user)
     unlockList(c);
 }
 
+/**
+ ** Removes the last element from the list
+ * @param c (List*) - The list to modify
+ * @returns void
+ */
 void removeLast(List *c)
 {
     if (isListEmpty(c))
@@ -213,6 +254,12 @@ void removeLast(List *c)
     unlockList(c);
 }
 
+/**
+ ** Finds a node containing a specific user in a thread-safe manner
+ * @param c (List*) - The list to search
+ * @param user (User*) - The user to find
+ * @returns Node* - The node containing the user or NULL if not found
+ */
 Node *findUserNodeSafe(List *c, User *user)
 {
     if (c == NULL || user == NULL)
@@ -235,6 +282,12 @@ Node *findUserNodeSafe(List *c, User *user)
     return NULL;
 }
 
+/**
+ ** Removes a specific user from the list
+ * @param c (List*) - The list to modify
+ * @param user (User*) - The user to remove
+ * @returns void
+ */
 void removeElement(List *c, User *user)
 {
     if (isListEmpty(c))
@@ -282,6 +335,11 @@ void removeElement(List *c, User *user)
     unlockList(c);
 }
 
+/**
+ ** Deletes the list and frees all memory
+ * @param c (List*) - The list to delete
+ * @returns void
+ */
 void deleteList(List *c)
 {
     if (c == NULL)
@@ -299,7 +357,6 @@ void deleteList(List *c)
 
     unlockList(c);
 
-    // Destroy the mutex
     pthread_mutex_destroy(&c->mutex);
 
     free(c);
