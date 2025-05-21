@@ -3,11 +3,9 @@
 
 #include <netinet/in.h>
 #include <stdbool.h>
-#include "ChainedList.h" // Now safe to include this
+#include "ChainedList.h"
 
 extern List *client_sockets;
-// Remove global mutex declaration
-// extern pthread_mutex_t clients_mutex;
 
 typedef enum
 {

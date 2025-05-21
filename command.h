@@ -22,7 +22,7 @@ typedef enum command
     LEAVE,
     UPLOAD,
     DOWNLOAD,
-    DELETE_CHANNEL, // Nouvelle commande pour supprimer un salon
+    DELETE_CHANNEL,
     UNKNOWN,
 } Command;
 

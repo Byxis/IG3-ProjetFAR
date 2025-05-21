@@ -11,7 +11,6 @@
 #include "user.h"
 #include "file.h"
 
-// Declare the global user list as external
 extern UserList *global_users;
 
 /**
@@ -204,7 +203,6 @@ void loadUsersFromFile(const char *filename)
             new_user->authenticated = false;
             new_user->socket_fd = -1;
 
-            // Use the thread-safe function to add to the list
             addUserToList(global_users, new_user);
         }
     }
@@ -255,7 +253,6 @@ void saveUsersToFile(const char *filename)
  */
 void registerUser(const char *username, const char *password, int socketFd, struct sockaddr_in addr)
 {
-    // Use the thread-safe function instead of direct access
     User *existing = findUserByNameSafe(global_users, username);
 
     if (existing != NULL)
@@ -273,8 +270,6 @@ void registerUser(const char *username, const char *password, int socketFd, stru
     new_user->ad = addr;
     new_user->socket_fd = socketFd;
     new_user->authenticated = true;
-
-    // Use the thread-safe function to add to the list
     addUserToList(global_users, new_user);
 
     saveUsersToFile("save_users.txt");

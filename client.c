@@ -77,7 +77,6 @@ void uploadFile(int socketFd, const char *filename)
         return;
     }
 
-    // Obtenir la taille du fichier
     fseek(file, 0, SEEK_END);
     long filesize = ftell(file);
     fseek(file, 0, SEEK_SET);
@@ -113,7 +112,6 @@ void uploadFile(int socketFd, const char *filename)
     {
         printf("\nEnvoi incomplet : %zu/%ld octets.\n", total, filesize);
     }
-
     fclose(file);
 }
 
@@ -230,7 +228,6 @@ void downloadFile(int socketFd, const char *filename)
 
     fclose(file);
     inDownload = 0;
-
     char endMarker[16] = {0};
     int endLen = recv(socketFd, endMarker, sizeof(endMarker) - 1, 0);
 
@@ -289,7 +286,7 @@ int main()
     }
     char message[MAX_MESSAGE_SIZE + 1];
     char buffer[256];
-
+  
     fgets(buffer, sizeof(buffer), stdin);
     buffer[strcspn(buffer, "\n")] = 0;
 
