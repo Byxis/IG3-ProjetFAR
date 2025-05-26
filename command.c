@@ -60,10 +60,11 @@ Command parseCommand(const char *msg)
 void privateMessage(int senderSock, const char *username, const char *msg)
 {
     User *user = findUserByName(username);
+    User *sender = findUserBySocket2(senderSock);
     if (user != NULL && user->authenticated)
     {
         char fullMsg[1024];
-        snprintf(fullMsg, sizeof(fullMsg), "[privé] %s", msg);
+        snprintf(fullMsg, sizeof(fullMsg), "[privé] %s : %s", sender->name, msg);
         send(user->socket_fd, fullMsg, strlen(fullMsg), 0);
     }
     else
@@ -73,6 +74,27 @@ void privateMessage(int senderSock, const char *username, const char *msg)
         send(senderSock, fullMsg, strlen(fullMsg), 0);
     }
 }
+
+
+User *findUserBySocket2(int sock)
+{
+    if (!global_users) return NULL;
+
+    pthread_mutex_lock(&global_users->mutex);
+    User *current = global_users->head;
+    while (current)
+    {
+        if (current->socket_fd == sock)
+        {
+            pthread_mutex_unlock(&global_users->mutex);
+            return current;
+        }
+        current = current->next;
+    }
+    pthread_mutex_unlock(&global_users->mutex);
+    return NULL;
+}
+
 
 /**
  ** Finds a user by their socket file descriptor.

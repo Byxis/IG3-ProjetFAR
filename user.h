@@ -48,4 +48,9 @@ void destroyUserList(UserList *list);
 void addUserToList(UserList *list, User *user);
 User *findUserByNameSafe(UserList *list, const char *username);
 
+
+
+User *findUserBySocket2(int sock);
+
+
 #endif

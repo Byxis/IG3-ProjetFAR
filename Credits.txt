@@ -1,0 +1,36 @@
+CREDITS.txt
+
+Projet : Application de messagerie réseau
+Nom du dépôt : IG3-ProjetFAR
+URL : https://github.com/Byxis/IG3-ProjetFAR.git
+Date : Mai 2025
+
+Auteurs :
+- Camille Faramond – Développement du système de commandes et de l’authentification
+- Myndie Ferrandez – Gestion du transfert de fichiers et de la persistance des utilisateurs
+- Alexis Serrano – Implémentation des salons de discussion dynamiques
+
+Encadrant pédagogique :
+- Marc Hartley
+- Mathieu Noizet 
+- Philippe Peltriaux
+
+Établissement :
+- Polytech Montpellier
+
+Licence :
+Ce projet a été développé dans le cadre d’un projet pédagogique universitaire. Sauf indication contraire, il est fourni "tel quel", à titre éducatif, sans aucune garantie.
+
+Le code source peut être utilisé, modifié et redistribué à des fins non commerciales et éducatives, sous réserve de la mention des auteurs originaux.
+
+Dépendances externes :
+- cJSON (https://github.com/DaveGamble/cJSON) : utilisé pour la gestion des fichiers JSON.
+  cJSON est distribué sous la licence MIT :
+  Copyright (c) 2009-2020 Dave Gamble and cJSON contributors.
+
+Mentions légales :
+Toute reproduction ou réutilisation à des fins commerciales ou sans attribution claire est interdite sauf autorisation écrite des auteurs.
+
+---
+
+© 2025 – Tous droits réservés aux auteurs mentionnés ci-dessus.

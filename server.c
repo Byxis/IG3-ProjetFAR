@@ -345,70 +345,84 @@ void handle_login(int client_socket)
     char password[100];
     struct sockaddr_in addr;
     socklen_t len = sizeof(addr);
-
     getpeername(client_socket, (struct sockaddr *)&addr, &len);
-    send(client_socket, "Entrez votre pseudo: ", 22, 0);
 
+    send(client_socket, "Bienvenue ! Tapez '1' pour se connecter ou '2' pour créer un compte : ", 70, 0);
     int rlen = recv(client_socket, buffer, sizeof(buffer) - 1, 0);
-    if (rlen <= 0)
-        return;
+    if (rlen <= 0) return;
+    buffer[rlen] = '\0';
+    int choice = atoi(buffer);
 
+    send(client_socket, "Entrez votre pseudo: ", 22, 0);
+    rlen = recv(client_socket, buffer, sizeof(buffer) - 1, 0);
+    if (rlen <= 0) return;
     buffer[rlen] = '\0';
     strncpy(username, buffer, sizeof(username));
     username[sizeof(username) - 1] = '\0';
 
     send(client_socket, "Entrez votre mot de passe: ", 28, 0);
     rlen = recv(client_socket, buffer, sizeof(buffer) - 1, 0);
-
-    if (rlen <= 0)
-        return;
-
+    if (rlen <= 0) return;
     buffer[rlen] = '\0';
     strncpy(password, buffer, sizeof(password));
     password[sizeof(password) - 1] = '\0';
 
     User *user = findUserByName(username);
 
-    if (!user)
-    {
-        User *newUser = createUser(client_socket, username, password, USER, &addr, true);
-
-        // Vérifier si la création de l'utilisateur a réussi
-        if (newUser == NULL)
-        {
-            fprintf(stderr, "Error: Failed to create new user\n");
-            send(client_socket, "Erreur serveur: impossible de créer l'utilisateur.\n", 52, 0);
+    if (choice == 1) {
+        if (!user || strcmp(user->password, password) != 0) {
+            send(client_socket, "Mot de passe incorrect ou utilisateur inconnu.\n", 48, 0);
             close(client_socket);
             return;
         }
-
-        add_client(newUser);
-        addUserToList(global_users, newUser);
-        send(client_socket, "Compte créé et connecté avec succès.\n", 39, 0);
-        saveUsersToFile("save_users.txt");
-    }
-    else if (strcmp(user->password, password) == 0)
-    {
         user->authenticated = true;
         user->socket_fd = client_socket;
         user->ad = addr;
         add_client(user);
         send(client_socket, "Connexion réussie.\n", 20, 0);
-    }
-    else
-    {
-        send(client_socket, "Mot de passe incorrect.\n", 25, 0);
+
+    } else if (choice == 2) {
+        if (user != NULL) {
+            send(client_socket, "Ce pseudo est déjà utilisé.\n", 29, 0);
+            close(client_socket);
+            return;
+        }
+        User *newUser = createUser(client_socket, username, password, USER, &addr, true);
+        if (newUser == NULL) {
+            fprintf(stderr, "Error: Failed to create new user\n");
+            send(client_socket, "Erreur serveur: impossible de créer l'utilisateur.\n", 52, 0);
+            close(client_socket);
+            return;
+        }
+        add_client(newUser);
+        addUserToList(global_users, newUser);
+        send(client_socket, "Compte créé et connecté avec succès.\n", 39, 0);
+        saveUsersToFile("save_users.txt");
+
+    } else {
+        send(client_socket, "Choix invalide.\n", 17, 0);
         close(client_socket);
     }
 }
+
 
 void sendAllClients(const char *message)
 {
     sendInfoToAll((char *)message);
 }
 
+
+void afficher_bandeau_serveur() {
+    printf("  ---------------------------------------------------------\n");
+    printf("  Serveur de messagerie démarré avec succès !\n");
+    printf("  ✉️  En attente de connexions des clients...\n");
+    printf("  Développé par : Alexis Serrano, Myndie Ferrandez, Camille Faramond\n");
+    printf("  ---------------------------------------------------------\n\n");
+}
+
 int main()
 {
+    afficher_bandeau_serveur();
     int server_socket = socket(PF_INET, SOCK_STREAM, 0);
 
     // Initialize our new structures with mutexes

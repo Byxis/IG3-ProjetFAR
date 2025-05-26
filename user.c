@@ -280,3 +280,6 @@ void registerUser(const char *username, const char *password, int socketFd, stru
     saveUsersToFile("save_users.txt");
     send(socketFd, "Utilisateur enregistré avec succès.\n", 39, 0);
 }
+
+
+

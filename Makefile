@@ -5,8 +5,8 @@ LDFLAGS = -pthread
 # Files for server
 SERVER_OBJS = server.o user.o command.o ChainedList.o Channel.o file.o
 
-# Files for client
-CLIENT_OBJS = client.o
+# Files for client (ajout de interface.o)
+CLIENT_OBJS = client.o interface.o
 
 all: server client
 

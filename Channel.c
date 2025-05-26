@@ -1,5 +1,5 @@
 #include "Channel.h"
-#include "user.h" 
+#include "user.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -178,11 +178,6 @@ Channel *createChannel(char *name, int maxSize, User *user)
     newChannel->clients = createList(user);
     newChannel->next = channelList.first->next;
     channelList.first->next = newChannel;
-
-    if (user != NULL)
-    {
-        addLast(newChannel->clients, user);
-    }
 
     unlockChannelList();
     save_channels("save_channels.txt");

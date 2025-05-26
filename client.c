@@ -8,6 +8,7 @@
 #include <sys/time.h>
 #include <pthread.h>
 #include <sys/stat.h>
+#include "interface.h"
 
 #define MAX_MESSAGE_SIZE 2000
 
@@ -29,31 +30,45 @@ void *receiveMessages(void *socketPtr)
         if (bytesRead > 0)
         {
             buffer[bytesRead] = '\0';
-            if (strcmp(buffer, "__END__") == 0)
+
+            if (strcmp(buffer, "__END__") == 0 ||
+                strcmp(buffer, "Fichier reçu avec succès\n") == 0 ||
+                strcmp(buffer, "Fichier reçu avec succès") == 0)
             {
                 continue;
             }
-            if (strcmp(buffer, "Fichier reçu avec succès\n") == 0 || strcmp(buffer, "Fichier reçu avec succès") == 0)
+
+            // Ne pas modifier les messages déjà stylés
+            if (strstr(buffer, "\033[") != NULL)
             {
-                continue;
+                printf("%s", buffer);
             }
-            printf("%s\n", buffer);
+            // Si le message est un message utilisateur (ex: chanel-user: blabla)
+            else if (strstr(buffer, ":") != NULL &&
+                     (strstr(buffer, "Hub-") != NULL || strstr(buffer, "chanel") != NULL))
+            {
+                printf("%s\n", buffer); // pas d'ajout de [INFO]
+            }
+            // Sinon, c’est un message système
+            else
+            {
+                print_info(buffer); // ajoute [INFO] en cyan
+            }
+
             fflush(stdout);
         }
         else if (bytesRead == 0)
         {
-            printf("\nConnexion fermée par le serveur\n");
+            print_error("\nConnexion fermée par le serveur\n");
             exit(0);
         }
-        else
+        else if (errno != EAGAIN && errno != EWOULDBLOCK)
         {
-            if (errno != EAGAIN && errno != EWOULDBLOCK)
-            {
-                perror("recv");
-                exit(1);
-            }
+            perror("recv");
+            exit(1);
         }
     }
+
     return NULL;
 }
 
@@ -67,13 +82,13 @@ void uploadFile(int socketFd, const char *filename)
 {
     if (strstr(filename, "..") != NULL)
     {
-        printf("Nom de fichier invalide.\n");
+        print_error("Connexion fermée par le serveur");
         return;
     }
     FILE *file = fopen(filename, "rb");
     if (file == NULL)
     {
-        printf("Erreur: Impossible d'ouvrir le fichier %s\n", filename);
+        print_error("Impossible d'ouvrir le fichier");
         return;
     }
 
@@ -91,13 +106,13 @@ void uploadFile(int socketFd, const char *filename)
     size_t bytes;
     size_t total = 0;
 
-    printf("Envoi de '%s' (%ld octets) vers le serveur...\n", filename, filesize);
+    printf(BOLD BLUE "Envoi de '%s' (%ld octets) vers le serveur...\n" RESET, filename, filesize);
 
     while ((bytes = fread(buffer, 1, sizeof(buffer), file)) > 0)
     {
         send(socketFd, buffer, bytes, 0);
         total += bytes;
-        printf("\rEnvoi: %zu/%ld octets (%.1f%%)", total, filesize, (float)total / filesize * 100);
+        printf("\r" GREEN "Envoi: %zu/%ld octets (%.1f%%)\n" RESET, total, filesize, (float)total / filesize * 100);
         fflush(stdout);
         usleep(10000);
     }
@@ -107,11 +122,11 @@ void uploadFile(int socketFd, const char *filename)
 
     if (total == filesize)
     {
-        printf("\nFichier '%s' (%ld octets) envoyé avec succès.\n", filename, filesize);
+        printf(BOLD GREEN "\nFichier '%s' (%ld octets) envoyé avec succès.\n" RESET, filename, filesize);
     }
     else
     {
-        printf("\nEnvoi incomplet : %zu/%ld octets.\n", total, filesize);
+        printf(BOLD RED "\nEnvoi incomplet : %zu/%ld octets.\n" RESET, total, filesize);
     }
 
     fclose(file);
@@ -129,7 +144,7 @@ void createDirectory(const char *dir)
     {
         if (mkdir(dir, 0700) != 0)
         {
-            perror("Erreur lors de la création du répertoire");
+            print_error("Erreur lors de la création du répertoire");
             return;
         }
     }
@@ -148,7 +163,7 @@ void downloadFile(int socketFd, const char *filename)
 
     if (strstr(filename, "..") != NULL)
     {
-        printf("Nom de fichier invalide.\n");
+        print_error("Nom de fichier invalide.\n");
         inDownload = 0;
         return;
     }
@@ -162,7 +177,7 @@ void downloadFile(int socketFd, const char *filename)
 
     if (len <= 0)
     {
-        perror("Erreur de réception initiale");
+        print_error("Erreur de réception initiale");
         inDownload = 0;
         return;
     }
@@ -172,11 +187,12 @@ void downloadFile(int socketFd, const char *filename)
 
     if (sscanf(response, "READY_TO_SEND:%255[^:]:%ld", serverFilename, &filesize) != 2)
     {
-        printf("Erreur: Réponse inattendue du serveur: %s\n", response);
+        fprintf(stderr, BOLD RED ": Réponse inattendue du serveur: %s\n" RESET, response);
         inDownload = 0;
         return;
     }
-    printf("Téléchargement de '%s' (%ld octets) depuis le serveur...\n", serverFilename, filesize);
+    printf(BOLD CYAN "Téléchargement de '%s' (%ld octets) depuis le serveur...\n" RESET, serverFilename, filesize);
+
     send(socketFd, "READY", 5, 0);
 
     char localPath[300];
@@ -186,7 +202,7 @@ void downloadFile(int socketFd, const char *filename)
 
     if (!file)
     {
-        perror("Erreur lors de la création du fichier local");
+        print_error("Erreur lors de la création du fichier local");
         inDownload = 0;
         return;
     }
@@ -199,7 +215,8 @@ void downloadFile(int socketFd, const char *filename)
         int n = recv(socketFd, buffer, sizeof(buffer), 0);
         if (n <= 0)
         {
-            printf("Erreur lors du transfert. Reçu %ld/%ld octets.\n", received, filesize);
+            print_error("Erreur lors du transfert");
+            printf(RED "\nReçu %ld/%ld octets.\n" RESET, received, filesize);
             break;
         }
         long toWrite = n;
@@ -220,7 +237,8 @@ void downloadFile(int socketFd, const char *filename)
         }
         fwrite(buffer, 1, toWrite, file);
         received += toWrite;
-        printf("\rRéception: %ld/%ld octets (%.1f%%)", received, filesize, (float)received / filesize * 100);
+        printf("\r" YELLOW "Réception: %ld/%ld octets (%.1f%%)" RESET, received, filesize, (float)received / filesize * 100);
+
         fflush(stdout);
         if (received >= filesize)
         {
@@ -241,7 +259,7 @@ void downloadFile(int socketFd, const char *filename)
         if (confirmLen > 0)
         {
             confirmMsg[confirmLen] = '\0';
-            printf("\nFichier '%s' (%ld octets) téléchargé avec succès dans 'downloads/'.\n", serverFilename, filesize);
+            printf(BOLD GREEN "\nFichier '%s' (%ld octets) téléchargé avec succès dans 'downloads/'.\n" RESET, serverFilename, filesize);
         }
     }
     else if (endLen > 0)
@@ -251,8 +269,26 @@ void downloadFile(int socketFd, const char *filename)
     }
     if (received != filesize)
     {
-        printf("\nTéléchargement incomplet : %ld/%ld octets.\n", received, filesize);
+        printf(BOLD RED "\nTéléchargement incomplet : %ld/%ld octets.\n" RESET, received, filesize);
     }
+}
+
+void afficher_bandeau()
+{
+    printf("  _________________________________________________________________  \n");
+    printf(" /                                                                 \\ \n");
+    printf("|   __          __  _                            _                 |\n");
+    printf("|   \\ \\        / / | |                          | |                |\n");
+    printf("|    \\ \\  /\\  / /__| | ___ ___  _ __ ___   ___  | |_ ___           |\n");
+    printf("|     \\ \\/  \\/ / _ \\ |/ __/ _ \\| '_ ` _ \\ / _ \\ | __/ _ \\          |\n");
+    printf("|      \\  /\\  /  __/ | (_| (_) | | | | | |  __/ | || (_) |         |\n");
+    printf("|       \\/  \\/ \\___|_|\\___\\___/|_| |_| |_|\\___|  \\__\\___/          |\n");
+    printf("|                                                                  |\n");
+    printf("|   Bienvenue sur la messagerie de :                               |\n");
+    printf("|                                                                  |\n");
+    printf("|   ✉️  Alexis Serrano  ✉️  Myndie Ferrandez  ✉️  Camille Faramond    |\n");
+    printf("|_________________________________________________________________|\n");
+    printf("\n");
 }
 
 /**
@@ -261,6 +297,8 @@ void downloadFile(int socketFd, const char *filename)
  */
 int main()
 {
+    afficher_bandeau();
+
     int socketFd = socket(PF_INET, SOCK_STREAM, 0);
     if (socketFd == -1)
     {
@@ -270,7 +308,7 @@ int main()
 
     struct sockaddr_in addr;
     addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = INADDR_ANY;
+    addr.sin_addr.s_addr = inet_addr("10.111.5.108");
     addr.sin_port = htons((short)31473);
 
     int res = connect(socketFd, (struct sockaddr *)&addr, sizeof(addr));
@@ -303,7 +341,7 @@ int main()
     if (len > 0)
     {
         buffer[len] = '\0';
-        printf("%s\n", buffer);
+        print_info(buffer); // printf("%s\n", buffer);
     }
     while (1)
     {
@@ -348,7 +386,7 @@ int main()
             }
             else
             {
-                printf("Nom de fichier manquant.\n");
+                print_error("Nom de fichier manquant.\n");
             }
             continue;
         }
