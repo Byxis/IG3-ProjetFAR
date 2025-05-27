@@ -55,7 +55,7 @@ Ce projet a été développé dans le cadre du module FAR par un groupe de 3 ét
 - **Outils de gestion de version** : GitHub
 
 ## Diagramme UML
-![alt text](pictureReadme/uml.png)
+![alt text](uml/uml.png)
 
 ## Planning et Répartition du travail
 Pour nous organiser nous avons mis en place un Gantt:
