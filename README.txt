@@ -1,4 +1,4 @@
-![alt text](picture/bordereaupolytech.png)
+![alt text](picture/banner_polytech_ig.png)
 
 # Projet FAR IG3: Application de messagerie
 
@@ -32,13 +32,13 @@ Ce projet a été développé dans le cadre du module FAR par un groupe de 3 ét
 
 ## Commandes disponibles (client)
 
-| Commande                      | Description                                       |
+| Commande                      | Description                                      |
 |------------------------------|---------------------------------------------------|
 | `@connect <pseudo> <mdp>`    | Connexion avec pseudo et mot de passe             |
 | `@msg <pseudo> <message>`    | Envoyer un message privé                          |
 | `@upload <fichier>`          | Envoyer un fichier au serveur                     |
 | `@download <fichier>`        | Télécharger un fichier du serveur                 |
-| `@create <salon> [max]`      | Créer un salon avec un nombre max de membres     |
+| `@create <salon> [max]`      | Créer un salon avec un nombre max de membres      |
 | `@join <salon>`              | Rejoindre un salon                                |
 | `@leave`                     | Quitter un salon                                  |
 | `@shutdown`                  | Arrêter le serveur (admin uniquement)             |
@@ -50,12 +50,15 @@ Ce projet a été développé dans le cadre du module FAR par un groupe de 3 ét
 - **Langage** : C
 - **Protocole réseau** : TCP (Sockets)
 - **Gestion de concurrence** : Threads POSIX (`pthread`)
-- **Sauvegarde** : JSON (avec `cJSON`)
+- **Sauvegarde** : TXT
 - **Organisation mémoire** : Liste chaînée personnalisée
 - **Outils de gestion de version** : GitHub
 
 ## Diagramme UML
-![alt text](pictureReadme/uml.png)
+![alt text](uml/uml.png)
+
+## Diagramme de Séquence
+![alt text](uml/DiagSeq.png)
 
 ## Planning et Répartition du travail
 Pour nous organiser nous avons mis en place un Gantt:
@@ -71,9 +74,14 @@ Pour nous organiser nous avons mis en place un Gantt:
 
 
 ## Compilation
+> Optionnel: Changer les adresses :
+> - Pour du local: remplacer inet_addr("10.111.5.108") par INADDR_ANY
+> - Pour du en ligne: remplacer inet_addr("10.111.5.108") par la bonne IP
+
 ```bash
 make
 ```
+
 Lancer le serveur
 ```bash
 ./server
@@ -83,6 +91,9 @@ Lancer le client
 ```bash
 ./client
 ```
+
+---
+
 
 ## Auteurs
 FARAMOND Camille <br>

@@ -23,11 +23,6 @@ Ce projet a été développé dans le cadre d’un projet pédagogique universit
 
 Le code source peut être utilisé, modifié et redistribué à des fins non commerciales et éducatives, sous réserve de la mention des auteurs originaux.
 
-Dépendances externes :
-- cJSON (https://github.com/DaveGamble/cJSON) : utilisé pour la gestion des fichiers JSON.
-  cJSON est distribué sous la licence MIT :
-  Copyright (c) 2009-2020 Dave Gamble and cJSON contributors.
-
 Mentions légales :
 Toute reproduction ou réutilisation à des fins commerciales ou sans attribution claire est interdite sauf autorisation écrite des auteurs.
 
