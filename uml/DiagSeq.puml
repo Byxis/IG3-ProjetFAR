@@ -20,4 +20,3 @@ end
 User1 -> Client : CTRL + C
 Client -> Server : Fermeture de la socket
 
-
