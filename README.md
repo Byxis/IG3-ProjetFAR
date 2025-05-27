@@ -1,4 +1,4 @@
-![alt text](picture/bordereaupolytech.png)
+![alt text](picture/banner_polytech_ig.png)
 
 # Projet FAR IG3: Application de messagerie
 
