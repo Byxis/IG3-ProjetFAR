@@ -1,7 +1,7 @@
 #ifndef COMMAND_H
 #define COMMAND_H
 
-#include <stdbool.h>
+#include "user.h"
 
 #define MAX_USERNAME_LENGTH 32
 #define MAX_PASSWORD_LENGTH 32
@@ -22,13 +22,14 @@ typedef enum command
     LEAVE,
     UPLOAD,
     DOWNLOAD,
+    DELETE_CHANNEL, // Nouvelle commande pour supprimer un salon
     UNKNOWN,
 } Command;
 
 // Fonction pour parser une commande à partir d'une chaîne
 Command parseCommand(const char *msg);
 
-// Fonction pour exécuter une commande
-void executeCommand(int sock, char *msg, int *shouldShutdown);
+// Execute a command based on the message from the user
+void executeCommand(User *user, const char *message, int *shouldShutdown);
 
-#endif
+#endif // COMMAND_H
